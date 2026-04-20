@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 import re
 
-# --- CONFIGURATION ---
+# --- CONFIGURATION DES SALLES ---
 SALLES_ARKOSE = {
     "Montreuil": "342457aab0148128933fe069f5899250",
     "Bordeaux": "342457aab01481c29bb2f231d970f528",
@@ -51,19 +51,24 @@ def push_to_notion(data, database_id, salle):
     url = "https://api.notion.com/v1/pages"
     headers = {"Authorization": f"Bearer {NOTION_TOKEN}", "Content-Type": "application/json", "Notion-Version": "2022-06-28"}
     
+    date_du_jour = datetime.now().strftime("%Y-%m-%d")
+    
     payload = {
         "parent": {"database_id": database_id},
         "properties": {
             "Nom de la tâche": {"title": [{"text": {"content": str(data.get("nom_de_la_tache", "Sans titre"))}}]},
-            "Établissement": {"select": {"name": salle}},
+            "Établissement": {"select": {"name": salle.upper()}},
             "Liste source": {"select": {"name": str(data.get("liste_source", "Accueil"))}},
-            "Projet source": {"rich_text": [{"text": {"content": f"Audit Interne {salle.upper()}"}}]},
+            "Projet source": {"rich_text": [{"text": {"content": f"Audit interne {salle.upper()}"}}]},
+            "Statut": {"status": {"name": "Saisie"}},
             "ITEM": {"select": {"name": str(data.get("item", "Process"))}},
             "Pôle concerné": {"select": {"name": str(data.get("pole_concerne", "Exploitation"))}},
             "Prise en charge": {"select": {"name": str(data.get("prise_en_charge", "Staff"))}},
             "Criticité": {"select": {"name": str(data.get("criticite", "Moyenne"))}},
             "Red flag": {"select": {"name": "Oui" if data.get("red_flag") == True else "Non"}},
-            "confiance qualification": {"rich_text": [{"text": {"content": str(data.get("confiance_qualification", "Camille"))}}]}
+            "Date de créa Notion": {"date": {"start": date_du_jour}},
+            "MAJ tâche NOTION": {"date": {"start": date_du_jour}},
+            "Confiance qualification": {"rich_text": [{"text": {"content": str(data.get("confiance_qualification", "Camille"))}}]}
         }
     }
     return requests.post(url, json=payload, headers=headers)
@@ -79,31 +84,26 @@ if audio_file and st.button("🚀 Analyser et envoyer"):
             prompt = f"""Tu es l'expert Arkose pour la salle {salle_selectionnee}.
             Analyse l'audio et extrais les tâches.
             Règles : Corner -> shop, Studio -> bien être.
-            Renvoie un JSON avec : nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag (booléen), confiance_qualification."""
+            Renvoie un JSON avec ces clés exactes : nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag (booléen), confiance_qualification."""
 
             response = client.models.generate_content(
-                model='gemini-flash-latest', # On passe sur le tout dernier modèle dispo
+                model='gemini-flash-latest',
                 contents=[uploaded_file, prompt],
                 config=types.GenerateContentConfig(response_mime_type="application/json")
             )
 
-            # Extraction robuste du JSON
             raw_text = response.text.strip()
-            # On cherche le premier [ ou { pour ignorer le texte avant
             match = re.search(r'[\{\[]', raw_text)
             if match:
                 data_json = json.loads(raw_text[match.start():])
+                if isinstance(data_json, list):
+                    for item in data_json:
+                        push_to_notion(item, db_id, salle_selectionnee)
+                else:
+                    push_to_notion(data_json, db_id, salle_selectionnee)
+                st.success(f"✅ Données de {salle_selectionnee} envoyées à Notion !")
             else:
-                data_json = json.loads(raw_text)
-
-            if isinstance(data_json, list):
-                for item in data_json:
-                    push_to_notion(item, db_id, salle_selectionnee)
-            else:
-                push_to_notion(data_json, db_id, salle_selectionnee)
-
-            st.success("✅ Données envoyées à Notion !")
+                st.error("L'IA n'a pas renvoyé de données structurées.")
             
         except Exception as e:
             st.error(f"Erreur : {e}")
-            st.write("Réponse brute de l'IA (pour debug) :", response.text if 'response' in locals() else "Pas de réponse")
