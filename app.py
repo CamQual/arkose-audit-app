@@ -4,9 +4,8 @@ from google.genai import types
 import requests
 import json
 from datetime import datetime
-import re
 
-# --- CONFIGURATION DES SALLES ---
+# --- CONFIGURATION ---
 SALLES_ARKOSE = {
     "Montreuil": "342457aab0148128933fe069f5899250",
     "Bordeaux": "342457aab01481c29bb2f231d970f528",
@@ -33,74 +32,86 @@ SALLES_ARKOSE = {
     "Saint Denis - CAO": "342457aab01481dc8ebbf88df7c120a8"
 }
 
-# --- INTERFACE ET DESIGN ---
-st.set_page_config(page_title="Audit Qualité Arkose", page_icon="🧗", layout="centered")
+st.set_page_config(page_title="Audit Arkose", page_icon="🧗")
 
-# Design Arkose
-css = """
+# --- DESIGN PERSONNALISÉ ---
+st.markdown("""
 <style>
-.stApp {
-    background-image: url("https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2070&auto=format&fit=crop");
-    background-size: cover;
-    background-position: center;
-    background-attachment: fixed;
-}
-h1 {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
-    color: white !important;
-    font-weight: 800;
-    text-transform: uppercase;
-}
-p, label, .stMarkdown {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
-    color: #f0f0f0 !important;
-}
-.stButton>button {
-    border: 2px solid #841bf3 !important;
-    background-color: rgba(132, 27, 243, 0.2) !important;
-    color: white !important;
-    font-weight: bold;
-    border-radius: 8px;
-    width: 100%;
-}
-.stButton>button:hover {
-    background-color: #841bf3 !important;
-}
-.stSelectbox div[data-baseweb="select"], .stFileUploader section {
-    border: 2px solid #841bf3 !important;
-    background-color: rgba(0,0,0,0.7) !important;
-    border-radius: 8px;
-}
+    @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@700;800&display=swap');
+
+    .stApp {
+        background-image: url("https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2070&auto=format&fit=crop");
+        background-size: cover;
+        background-attachment: fixed;
+    }
+
+    /* Titre style Roc Grotesk */
+    h1 {
+        font-family: 'Open Sans', sans-serif !important;
+        font-weight: 800 !important;
+        text-transform: uppercase;
+        color: white !important;
+        letter-spacing: -2px;
+    }
+
+    /* Labels en gras (Établissement et Audio) */
+    label p {
+        font-weight: 900 !important;
+        font-family: 'Helvetica Neue', sans-serif !important;
+        color: white !important;
+        font-size: 1.1rem !important;
+    }
+
+    .stButton>button {
+        border: 2px solid #841bf3 !important;
+        background-color: rgba(132, 27, 243, 0.2) !important;
+        color: white !important;
+        font-weight: bold;
+        border-radius: 10px;
+    }
+
+    .stSelectbox div[data-baseweb="select"], .stFileUploader section {
+        border: 2px solid #841bf3 !important;
+        background-color: rgba(0,0,0,0.7) !important;
+        border-radius: 10px;
+    }
 </style>
-"""
-st.markdown(css, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 st.title("🧗 Audit Qualité Arkose")
 
 # --- LOGIQUE ---
-if "GEMINI_API_KEY" in st.secrets and "NOTION_TOKEN" in st.secrets:
-    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-    token = st.secrets["NOTION_TOKEN"]
-else:
-    st.error("Secrets manquants.")
-    st.stop()
+client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+token = st.secrets["NOTION_TOKEN"]
 
-salle = st.selectbox("Établissement :", list(SALLES_ARKOSE.keys()))
-db_id = SALLES_ARKOSE[salle]
-audio = st.file_uploader("Audio d'audit", type=['mp3', 'm4a', 'wav', 'mp4'])
+# Établissement (Gras via CSS)
+salle_nom = st.selectbox("Établissement :", list(SALLES_ARKOSE.keys()))
+db_id = SALLES_ARKOSE[salle_nom]
 
-def push_to_notion(data, database_id, salle_nom):
+# --- OPTION MICRO OU FICHIER ---
+st.write("---")
+col1, col2 = st.columns(2)
+
+with col1:
+    audio_file = st.file_uploader("📂 Télécharger un audio", type=['mp3', 'm4a', 'wav'])
+
+with col2:
+    audio_record = st.audio_input("🎤 Enregistrer en direct")
+
+# On récupère l'audio peu importe la source
+final_audio = audio_file if audio_file else audio_record
+
+def push_to_notion(data, database_id, name):
     url = "https://api.notion.com/v1/pages"
-    headers = {"Authorization": "Bearer " + token, "Content-Type": "application/json", "Notion-Version": "2022-06-28"}
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Notion-Version": "2022-06-28"}
     date_jour = datetime.now().strftime("%Y-%m-%d")
-    
     payload = {
         "parent": {"database_id": database_id},
         "properties": {
             "Nom de la tâche": {"title": [{"text": {"content": str(data.get("nom_de_la_tache", "Sans titre"))}}]},
-            "Établissement": {"select": {"name": salle_nom.upper()}},
+            "Établissement": {"select": {"name": name.upper()}},
             "Liste source": {"select": {"name": str(data.get("liste_source", "Accueil"))}},
-            "Projet source": {"rich_text": [{"text": {"content": "Audit interne " + salle_nom.upper()}}]},
+            "Projet source": {"rich_text": [{"text": {"content": f"Audit {name.upper()}"}}]},
             "Statut": {"status": {"name": "Saisie"}},
             "ITEM": {"select": {"name": str(data.get("item", "Process"))}},
             "Pôle concerné": {"select": {"name": str(data.get("pole_concerne", "Exploitation"))}},
@@ -109,40 +120,30 @@ def push_to_notion(data, database_id, salle_nom):
             "Red flag": {"select": {"name": "Oui" if data.get("red_flag") else "Non"}},
             "Date de créa Notion": {"date": {"start": date_jour}},
             "MAJ tâche NOTION": {"date": {"start": date_jour}},
-            "Confiance qualification": {"rich_text": [{"text": {"content": str(data.get("confiance_qualification", "Camille"))}}]}
+            "Confiance qualification": {"rich_text": [{"text": {"content": "Camille"}}]}
         }
     }
     return requests.post(url, json=payload, headers=headers)
 
-if audio and st.button("🚀 ENVOYER L'AUDIT"):
+if final_audio and st.button("🚀 ANALYSER ET ENVOYER"):
     with st.spinner("Analyse..."):
         try:
-            with open("temp.m4a", "wb") as f: f.write(audio.getbuffer())
+            with open("temp.m4a", "wb") as f:
+                f.write(final_audio.getbuffer())
+            
             f_up = client.files.upload(file="temp.m4a")
+            prompt = "Expert Arkose. Analyse l'audio. JSON: nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag(bool)."
             
-            prompt = """Tu es l'expert audit Arkose. Analyse l'audio et génère un JSON pour chaque tâche.
-            Respecte ces options:
-            - liste_source: Extérieur/terrasse, Accueil, Bar, Cantine, Cuisine, Toilettes Salle, Vestiaire, Fitness, Salle globale, shop, bien être.
-            - item: Accueil/Discours/Expé client, Image de marque, Propreté/hygiène/entretien, Process, Valorisation de l'offre.
-            - pole_concerne: Exploitation, Travaux/Maintenance, Escalade, Com&Market, Déco, Support IT, RH.
-            - prise_en_charge: Le night, Mail équipe support, Staff, Achat exploit, Prestataire extérieur.
-            - criticite: Faible, Moyenne, Critique.
-            
-            Format: {"nom_de_la_tache": "...", "liste_source": "...", "item": "...", "pole_concerne": "...", "prise_en_charge": "...", "criticite": "...", "red_flag": true/false, "confiance_qualification": "Camille"}"""
-
-            response = client.models.generate_content(
+            resp = client.models.generate_content(
                 model='gemini-1.5-flash-latest',
                 contents=[f_up, prompt],
                 config=types.GenerateContentConfig(response_mime_type="application/json")
             )
-
-            data_json = json.loads(response.text)
-            items = data_json if isinstance(data_json, list) else [data_json]
-
-            for item in items:
-                push_to_notion(item, db_id, salle)
             
-            st.success("✅ Audit envoyé avec succès !")
-            
+            data = json.loads(resp.text)
+            items = data if isinstance(data, list) else [data]
+            for i in items:
+                push_to_notion(i, db_id, salle_nom)
+            st.success(f"✅ {len(items)} tâche(s) envoyée(s) !")
         except Exception as e:
-            st.error("Détail : " + str(e))
+            st.error(f"Erreur : {e}")
