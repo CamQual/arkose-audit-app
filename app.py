@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 import re
 
-# --- CONFIGURATION DES SALLES ---
+# --- CONFIGURATION ---
 SALLES_ARKOSE = {
     "Montreuil": "342457aab0148128933fe069f5899250",
     "Bordeaux": "342457aab01481c29bb2f231d970f528",
@@ -33,77 +33,44 @@ SALLES_ARKOSE = {
     "Saint Denis - CAO": "342457aab01481dc8ebbf88df7c120a8"
 }
 
-st.set_page_config(page_title="Arkose Quality Audit", page_icon="🧗")
+st.set_page_config(page_title="Audit Arkose", page_icon="🧗")
 st.title("🧗 Audit Qualité Arkose")
 
-if "GEMINI_API_KEY" not in st.secrets or "NOTION_TOKEN" not in st.secrets:
-    st.error("⚠️ Secrets manquants.")
-    st.stop()
-
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-NOTION_TOKEN = st.secrets["NOTION_TOKEN"]
+token = st.secrets["NOTION_TOKEN"]
 
-salle_selectionnee = st.selectbox("Établissement :", list(SALLES_ARKOSE.keys()))
-db_id = SALLES_ARKOSE[salle_selectionnee]
-audio_file = st.file_uploader("Audio d'audit", type=['mp3', 'm4a', 'wav', 'mp4'])
+salle = st.selectbox("Établissement :", list(SALLES_ARKOSE.keys()))
+db_id = SALLES_ARKOSE[salle]
+audio = st.file_uploader("Audio", type=['mp3', 'm4a', 'wav', 'mp4'])
 
-def push_to_notion(data, database_id, salle):
-    url = "https://api.notion.com/v1/pages"
-    headers = {"Authorization": f"Bearer {NOTION_TOKEN}", "Content-Type": "application/json", "Notion-Version": "2022-06-28"}
-    
-    date_du_jour = datetime.now().strftime("%Y-%m-%d")
-    
-    payload = {
-        "parent": {"database_id": database_id},
-        "properties": {
-            "Nom de la tâche": {"title": [{"text": {"content": str(data.get("nom_de_la_tache", "Sans titre"))}}]},
-            "Établissement": {"select": {"name": salle.upper()}},
-            "Liste source": {"select": {"name": str(data.get("liste_source", "Accueil"))}},
-            "Projet source": {"rich_text": [{"text": {"content": f"Audit interne {salle.upper()}"}}]},
-            "Statut": {"status": {"name": "Saisie"}},
-            "ITEM": {"select": {"name": str(data.get("item", "Process"))}},
-            "Pôle concerné": {"select": {"name": str(data.get("pole_concerne", "Exploitation"))}},
-            "Prise en charge": {"select": {"name": str(data.get("prise_en_charge", "Staff"))}},
-            "Criticité": {"select": {"name": str(data.get("criticite", "Moyenne"))}},
-            "Red flag": {"select": {"name": "Oui" if data.get("red_flag") == True else "Non"}},
-            "Date de créa Notion": {"date": {"start": date_du_jour}},
-            "MAJ tâche NOTION": {"date": {"start": date_du_jour}},
-            "Confiance qualification": {"rich_text": [{"text": {"content": str(data.get("confiance_qualification", "Camille"))}}]}
-        }
-    }
-    return requests.post(url, json=payload, headers=headers)
-
-if audio_file and st.button("🚀 Analyser et envoyer"):
-    with st.spinner("Analyse Gemini en cours..."):
+if audio and st.button("🚀 Envoyer"):
+    with st.spinner("Analyse..."):
         try:
-            with open("temp_audio.m4a", "wb") as f:
-                f.write(audio_file.getbuffer())
+            with open("temp.m4a", "wb") as f: f.write(audio.getbuffer())
+            f_up = client.files.upload(file="temp.m4a")
             
-            uploaded_file = client.files.upload(file="temp_audio.m4a")
+            prompt = f"Expert Arkose salle {salle}. Extrais les tâches en JSON: nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag (bool)."
+            resp = client.models.generate_content(model='gemini-flash-latest', contents=[f_up, prompt], config=types.GenerateContentConfig(response_mime_type="application/json"))
             
-            prompt = f"""Tu es l'expert Arkose pour la salle {salle_selectionnee}.
-            Analyse l'audio et extrais les tâches.
-            Règles : Corner -> shop, Studio -> bien être.
-            Renvoie un JSON avec ces clés exactes : nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag (booléen), confiance_qualification."""
+            data_json = json.loads(resp.text)
+            items = data_json if isinstance(data_json, list) else [data_json]
 
-            response = client.models.generate_content(
-                model='gemini-flash-latest',
-                contents=[uploaded_file, prompt],
-                config=types.GenerateContentConfig(response_mime_type="application/json")
-            )
-
-            raw_text = response.text.strip()
-            match = re.search(r'[\{\[]', raw_text)
-            if match:
-                data_json = json.loads(raw_text[match.start():])
-                if isinstance(data_json, list):
-                    for item in data_json:
-                        push_to_notion(item, db_id, salle_selectionnee)
+            for item in items:
+                payload = {
+                    "parent": {"database_id": db_id},
+                    "properties": {
+                        "Nom de la tâche": {"title": [{"text": {"content": str(item.get("nom_de_la_tache", "Sans titre"))}}]},
+                        "Établissement": {"select": {"name": salle.upper()}},
+                        "Projet source": {"rich_text": [{"text": {"content": f"Audit interne {salle.upper()}"}}]}
+                    }
+                }
+                # On envoie d'abord le minimum vital pour voir si la ligne se crée
+                r = requests.post("https://api.notion.com/v1/pages", json=payload, headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Notion-Version": "2022-06-28"})
+                
+                if r.status_code != 200:
+                    st.error(f"Erreur Notion : {r.text}")
                 else:
-                    push_to_notion(data_json, db_id, salle_selectionnee)
-                st.success(f"✅ Données de {salle_selectionnee} envoyées à Notion !")
-            else:
-                st.error("L'IA n'a pas renvoyé de données structurées.")
-            
+                    st.success(f"✅ Ligne créée pour {salle} !")
+
         except Exception as e:
             st.error(f"Erreur : {e}")
