@@ -40,13 +40,13 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap');
 
     .stApp {
-        background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), 
+        background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)), 
                     url("https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2070&auto=format&fit=crop");
         background-size: cover;
         background-attachment: fixed;
     }
 
-    /* Titre Roc Grotesk Style */
+    /* Titre principal - Style Roc Grotesk */
     h1 {
         font-family: 'Inter', sans-serif !important;
         font-weight: 900 !important;
@@ -54,136 +54,4 @@ st.markdown("""
         color: white !important;
         letter-spacing: -2px;
         line-height: 1;
-        margin-bottom: 2rem !important;
-    }
-
-    /* Labels Helvetica Neue Gras */
-    label p {
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
-        color: white !important;
-        font-weight: 700 !important;
-        font-size: 1.1rem !important;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    /* Harmonisation des onglets et boutons */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 10px;
-        background-color: transparent;
-    }
-
-    .stTabs [data-baseweb="tab"] {
-        height: 50px;
-        background-color: rgba(255,255,255,0.05);
-        border-radius: 8px 8px 0px 0px;
-        color: white;
-        border: 1px solid rgba(132, 27, 243, 0.3);
-    }
-
-    .stTabs [aria-selected="true"] {
-        background-color: rgba(132, 27, 243, 0.4) !important;
-        border-bottom: 3px solid #841bf3 !important;
-    }
-
-    /* Bouton principal */
-    .stButton>button {
-        border: none !important;
-        background-color: #841bf3 !important;
-        color: white !important;
-        font-weight: 800 !important;
-        border-radius: 12px;
-        padding: 1.2rem;
-        text-transform: uppercase;
-        width: 100%;
-        margin-top: 2rem;
-        transition: 0.3s ease;
-    }
-    
-    .stButton>button:hover {
-        box-shadow: 0 0 30px rgba(132, 27, 243, 0.8);
-        transform: translateY(-2px);
-    }
-
-    /* Inputs */
-    .stSelectbox div[data-baseweb="select"], .stFileUploader section, .stAudioInput {
-        border: 1px solid #841bf3 !important;
-        background-color: rgba(0,0,0,0.8) !important;
-        border-radius: 12px;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-st.title("Listing Audit Interne -> Notion")
-
-# --- LOGIQUE ---
-client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-token = st.secrets["NOTION_TOKEN"]
-
-# Sélection de l'établissement
-salle_nom = st.selectbox("Établissement :", list(SALLES_ARKOSE.keys()))
-db_id = SALLES_ARKOSE[salle_nom]
-
-st.write("") # Espacement
-
-# --- HARMONISATION DES BOUTONS (TABS) ---
-tab_micro, tab_file = st.tabs(["🎤 ENREGISTRER", "📂 UPLOADER"])
-
-with tab_micro:
-    audio_record = st.audio_input("Capture vocale en direct")
-
-with tab_file:
-    audio_file = st.file_uploader("Fichier audio (mp3, m4a...)", type=['mp3', 'm4a', 'wav'])
-
-final_audio = audio_file if audio_file else audio_record
-
-def push_to_notion(data, database_id, name):
-    url = "https://api.notion.com/v1/pages"
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Notion-Version": "2022-06-28"}
-    date_jour = datetime.now().strftime("%Y-%m-%d")
-    
-    payload = {
-        "parent": {"database_id": database_id},
-        "properties": {
-            "Nom de la tâche": {"title": [{"text": {"content": str(data.get("nom_de_la_tache", "Sans titre"))}}]},
-            "Établissement": {"select": {"name": name.upper()}},
-            "Liste source": {"select": {"name": str(data.get("liste_source", "Accueil"))}},
-            "Projet source": {"rich_text": [{"text": {"content": f"Audit {name.upper()}"}}]},
-            "Statut": {"status": {"name": "Saisie"}},
-            "ITEM": {"select": {"name": str(data.get("item", "Process"))}},
-            "Pôle concerné": {"select": {"name": str(data.get("pole_concerne", "Exploitation"))}},
-            "Prise en charge": {"select": {"name": str(data.get("prise_en_charge", "Staff"))}},
-            "Criticité": {"select": {"name": str(data.get("criticite", "Moyenne"))}},
-            "Red flag": {"select": {"name": "Oui" if data.get("red_flag") else "Non"}},
-            "Date de créa Notion": {"date": {"start": date_jour}},
-            "MAJ tâche NOTION": {"date": {"start": date_jour}},
-            "Confiance qualification": {"rich_text": [{"text": {"content": "Camille"}}]}
-        }
-    }
-    return requests.post(url, json=payload, headers=headers)
-
-# Bouton d'envoi unique et centré
-if final_audio:
-    if st.button("🚀 LANCER L'ANALYSE ARK-IA"):
-        with st.spinner("Analyse et synchronisation Notion..."):
-            try:
-                with open("temp.m4a", "wb") as f:
-                    f.write(final_audio.getbuffer())
-                
-                f_up = client.files.upload(file="temp.m4a")
-                prompt = "Expert Arkose. Analyse l'audio. JSON obligatoire: nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag(bool)."
-                
-                resp = client.models.generate_content(
-                    model='gemini-1.5-flash-latest',
-                    contents=[f_up, prompt],
-                    config=types.GenerateContentConfig(response_mime_type="application/json")
-                )
-                
-                items = json.loads(resp.text)
-                if not isinstance(items, list): items = [items]
-                
-                for i in items:
-                    push_to_notion(i, db_id, salle_nom)
-                st.success(f"🔥 Audit synchronisé ! {len(items)} tâche(s) ajoutée(s).")
-            except Exception as e:
-                st.error(f"Erreur technique : {e}")
+        margin-bottom: 2.5rem !important
