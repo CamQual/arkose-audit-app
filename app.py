@@ -5,7 +5,7 @@ import requests
 import json
 from datetime import datetime
 
-# --- CONFIGURATION ---
+# --- CONFIGURATION DES SALLES ---
 SALLES_ARKOSE = {
     "Montreuil": "342457aab0148128933fe069f5899250",
     "Bordeaux": "342457aab01481c29bb2f231d970f528",
@@ -34,10 +34,10 @@ SALLES_ARKOSE = {
 
 st.set_page_config(page_title="Audit Arkose", page_icon="🧗")
 
-# --- DESIGN PERSONNALISÉ ---
+# --- DESIGN & POLICES ---
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap');
 
     .stApp {
         background-image: url("https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2070&auto=format&fit=crop");
@@ -45,60 +45,68 @@ st.markdown("""
         background-attachment: fixed;
     }
 
-    /* Titre style Roc Grotesk */
+    /* Titre style Roc Grotesk (via Inter Black) */
     h1 {
-        font-family: 'Open Sans', sans-serif !important;
-        font-weight: 800 !important;
+        font-family: 'Inter', sans-serif !important;
+        font-weight: 900 !important;
         text-transform: uppercase;
         color: white !important;
-        letter-spacing: -2px;
+        letter-spacing: -3px;
+        font-size: 3.5rem !important;
     }
 
-    /* Labels en gras (Établissement et Audio) */
-    label p {
-        font-weight: 900 !important;
-        font-family: 'Helvetica Neue', sans-serif !important;
+    /* Corps de texte et Labels en Helvetica Neue Gras */
+    p, label, .stMarkdown, .stSelectbox label, .stFileUploader label {
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
         color: white !important;
+        font-weight: 700 !important; /* Gras pour les labels */
         font-size: 1.1rem !important;
     }
 
+    /* Bouton principal Arkose */
     .stButton>button {
         border: 2px solid #841bf3 !important;
-        background-color: rgba(132, 27, 243, 0.2) !important;
+        background-color: rgba(132, 27, 243, 0.3) !important;
         color: white !important;
         font-weight: bold;
-        border-radius: 10px;
+        border-radius: 12px;
+        padding: 1rem;
+        text-transform: uppercase;
+    }
+    
+    .stButton>button:hover {
+        background-color: #841bf3 !important;
+        box-shadow: 0 0 20px rgba(132, 27, 243, 0.6);
     }
 
-    .stSelectbox div[data-baseweb="select"], .stFileUploader section {
+    /* Inputs avec contour violet */
+    .stSelectbox div[data-baseweb="select"], .stFileUploader section, .stAudioInput {
         border: 2px solid #841bf3 !important;
-        background-color: rgba(0,0,0,0.7) !important;
-        border-radius: 10px;
+        background-color: rgba(0,0,0,0.8) !important;
+        border-radius: 12px;
     }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🧗 Audit Qualité Arkose")
+st.title("🧗 Audit Arkose")
 
 # --- LOGIQUE ---
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 token = st.secrets["NOTION_TOKEN"]
 
-# Établissement (Gras via CSS)
+# Établissement
 salle_nom = st.selectbox("Établissement :", list(SALLES_ARKOSE.keys()))
 db_id = SALLES_ARKOSE[salle_nom]
 
-# --- OPTION MICRO OU FICHIER ---
-st.write("---")
+st.write("### 🎤 Saisie de l'audit")
+
+# --- DEUX OPTIONS DE SAISIE ---
 col1, col2 = st.columns(2)
-
 with col1:
-    audio_file = st.file_uploader("📂 Télécharger un audio", type=['mp3', 'm4a', 'wav'])
-
+    audio_record = st.audio_input("Enregistrer un message")
 with col2:
-    audio_record = st.audio_input("🎤 Enregistrer en direct")
+    audio_file = st.file_uploader("Ou uploader un fichier", type=['mp3', 'm4a', 'wav'])
 
-# On récupère l'audio peu importe la source
 final_audio = audio_file if audio_file else audio_record
 
 def push_to_notion(data, database_id, name):
@@ -125,14 +133,15 @@ def push_to_notion(data, database_id, name):
     }
     return requests.post(url, json=payload, headers=headers)
 
-if final_audio and st.button("🚀 ANALYSER ET ENVOYER"):
-    with st.spinner("Analyse..."):
+if final_audio and st.button("🚀 ANALYSER ET ENVOYER À NOTION"):
+    with st.spinner("Analyse intelligente Arkose en cours..."):
         try:
             with open("temp.m4a", "wb") as f:
                 f.write(final_audio.getbuffer())
             
             f_up = client.files.upload(file="temp.m4a")
-            prompt = "Expert Arkose. Analyse l'audio. JSON: nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag(bool)."
+            prompt = """Expert Arkose. Analyse l'audio. JSON obligatoire: 
+            nom_de_la_tache, liste_source (Accueil, Bar, Toilettes, etc.), item, pole_concerne, prise_en_charge, criticite, red_flag (bool)."""
             
             resp = client.models.generate_content(
                 model='gemini-1.5-flash-latest',
@@ -140,10 +149,12 @@ if final_audio and st.button("🚀 ANALYSER ET ENVOYER"):
                 config=types.GenerateContentConfig(response_mime_type="application/json")
             )
             
-            data = json.loads(resp.text)
-            items = data if isinstance(data, list) else [data]
+            items = json.loads(resp.text)
+            if not isinstance(items, list): items = [items]
+            
             for i in items:
                 push_to_notion(i, db_id, salle_nom)
-            st.success(f"✅ {len(items)} tâche(s) envoyée(s) !")
+            
+            st.success(f"✅ Terminé ! {len(items)} tâche(s) ajoutée(s).")
         except Exception as e:
             st.error(f"Erreur : {e}")
