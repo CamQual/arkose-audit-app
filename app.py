@@ -4,8 +4,6 @@ from google.genai import types
 import requests
 import json
 from datetime import datetime
-import base64
-import os
 
 # --- CONFIGURATION DES SALLES ---
 SALLES_ARKOSE = {
@@ -36,66 +34,33 @@ SALLES_ARKOSE = {
 
 st.set_page_config(page_title="Audit Arkose", page_icon="🧗", layout="centered")
 
-# --- CHARGEMENT DES FICHIERS LOCAUX (FOND ET POLICES) ---
-def load_custom_assets():
-    css_string = "<style>\n"
+# --- DESIGN INFAILLIBLE (WEB URLS) ---
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap');
 
-    # 1. Image de fond (fond.jpg)
-    if os.path.exists("fond.jpg"):
-        with open("fond.jpg", "rb") as img_file:
-            b64_img = base64.b64encode(img_file.read()).decode()
-        css_string += f"""
-        .stApp {{
-            background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url("data:image/jpeg;base64,{b64_img}");
-            background-size: cover;
-            background-attachment: fixed;
-        }}
-        """
-    else:
-        # Couleur noire de secours si l'image n'est pas encore sur GitHub
-        css_string += ".stApp { background-color: #1a1a1a; }\n"
+    /* Fond noir grainé assuré */
+    .stApp {
+        background: linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.8)), 
+                    url("https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2070&auto=format&fit=crop");
+        background-size: cover;
+        background-attachment: fixed;
+    }
 
-    # 2. Police Roc Grotesk
-    font_path_roc = "RocGrotesk.ttf" if os.path.exists("RocGrotesk.ttf") else "RocGrotesk.otf"
-    if os.path.exists(font_path_roc):
-        with open(font_path_roc, "rb") as f:
-            b64_font = base64.b64encode(f.read()).decode()
-        ext = "opentype" if font_path_roc.endswith(".otf") else "truetype"
-        css_string += f"""
-        @font-face {{
-            font-family: 'Roc Grotesk Custom';
-            src: url(data:font/{font_path_roc.split('.')[-1]};charset=utf-8;base64,{b64_font}) format('{ext}');
-        }}
-        """
-
-    # 3. Police Helvetica Neue
-    font_path_helv = "HelveticaNeue.ttf" if os.path.exists("HelveticaNeue.ttf") else "HelveticaNeue.otf"
-    if os.path.exists(font_path_helv):
-        with open(font_path_helv, "rb") as f:
-            b64_font = base64.b64encode(f.read()).decode()
-        ext = "opentype" if font_path_helv.endswith(".otf") else "truetype"
-        css_string += f"""
-        @font-face {{
-            font-family: 'Helvetica Neue Custom';
-            src: url(data:font/{font_path_helv.split('.')[-1]};charset=utf-8;base64,{b64_font}) format('{ext}');
-        }}
-        """
-
-    # --- RÈGLES DE STYLE GLOBALES ---
-    css_string += """
-    /* Titre : Plus petit, Roc Grotesk, sans majuscules forcées */
+    /* Titre (Style Roc Grotesk) */
     h1 {
-        font-family: 'Roc Grotesk Custom', sans-serif !important;
-        font-weight: 800 !important;
-        text-transform: none !important; 
+        font-family: 'Inter', sans-serif !important;
+        font-weight: 900 !important;
+        text-transform: none !important;
         color: white !important;
-        font-size: 2.2rem !important; 
+        letter-spacing: -2px;
+        font-size: 2.2rem !important;
         margin-bottom: 2rem !important;
     }
 
     /* Reste du texte : Helvetica Neue */
     p, label, span, div, .stMarkdown, button {
-        font-family: 'Helvetica Neue Custom', 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
     }
 
     label p {
@@ -104,6 +69,7 @@ def load_custom_assets():
         font-size: 1.1rem !important;
     }
 
+    /* Harmonisation des onglets */
     .stTabs [data-baseweb="tab-list"] { gap: 15px; }
     .stTabs [data-baseweb="tab"] {
         height: 50px;
@@ -117,6 +83,7 @@ def load_custom_assets():
         border-bottom: 3px solid #841bf3 !important;
     }
 
+    /* Formulaires et Boutons */
     .stAudioInput {
         margin-top: 20px;
         padding: 15px;
@@ -144,20 +111,16 @@ def load_custom_assets():
         background-color: rgba(0,0,0,0.8) !important;
         border-radius: 12px;
     }
-    </style>
-    """
-    st.markdown(css_string, unsafe_allow_html=True)
+</style>
+""", unsafe_allow_html=True)
 
-# Lancement de la fonction de style
-load_custom_assets()
-
-# --- BANNIÈRE ---
+# --- BANNIÈRE (On garde la tienne car elle marche !) ---
 try:
     st.image("banniere audit interne.jpg", use_container_width=True)
 except Exception:
     pass
 
-st.title("Listing Audit interne -> Notion")
+st.title("Listing Audit interne → Notion")
 
 # --- LOGIQUE ---
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
@@ -196,37 +159,4 @@ def push_to_notion(data, database_id, name):
             "Statut": {"status": {"name": "Saisie"}},
             "ITEM": {"select": {"name": str(data.get("item", "Process"))}},
             "Pôle concerné": {"select": {"name": str(data.get("pole_concerne", "Exploitation"))}},
-            "Prise en charge": {"select": {"name": str(data.get("prise_en_charge", "Staff"))}},
-            "Criticité": {"select": {"name": str(data.get("criticite", "Moyenne"))}},
-            "Red flag": {"select": {"name": "Oui" if data.get("red_flag") else "Non"}},
-            "Date de créa Notion": {"date": {"start": date_jour}},
-            "MAJ tâche NOTION": {"date": {"start": date_jour}},
-            "Confiance qualification": {"rich_text": [{"text": {"content": "Camille"}}]}
-        }
-    }
-    return requests.post(url, json=payload, headers=headers)
-
-if final_audio:
-    if st.button("Lancer l'analyse vers Notion"):
-        with st.spinner("Analyse et envoi..."):
-            try:
-                with open("temp.m4a", "wb") as f:
-                    f.write(final_audio.getbuffer())
-                
-                f_up = client.files.upload(file="temp.m4a")
-                prompt = "Expert Arkose. Analyse l'audio. JSON obligatoire: nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag(bool)."
-                
-                resp = client.models.generate_content(
-                    model='gemini-1.5-flash-latest',
-                    contents=[f_up, prompt],
-                    config=types.GenerateContentConfig(response_mime_type="application/json")
-                )
-                
-                items = json.loads(resp.text)
-                if not isinstance(items, list): items = [items]
-                
-                for i in items:
-                    push_to_notion(i, db_id, salle_nom)
-                st.success(f"Audit synchronisé ! {len(items)} tâche(s) ajoutée(s).")
-            except Exception as e:
-                st.error(f"Erreur technique : {e}")
+            "Prise en charge": {"select": {"name": str(data.get("prise_en_charge",
