@@ -114,6 +114,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# --- BANNIÈRE ---
+try:
+    st.image("banniere audit interne.jpg", use_container_width=True)
+except Exception:
+    st.info("💡 N'oublie pas d'ajouter le fichier 'banniere audit interne.jpg' sur ton GitHub pour voir la bannière apparaître ici.")
+
 st.title("Listing Audit Interne -> Notion")
 
 # --- LOGIQUE ---
