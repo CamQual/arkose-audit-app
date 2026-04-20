@@ -34,7 +34,7 @@ SALLES_ARKOSE = {
 }
 
 st.set_page_config(page_title="Audit Arkose", page_icon="🧗")
-st.title("🧗 Audit Qualité Arkose")
+st.title("🧗 Audit Qualité Arkose -> Notion")
 
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 token = st.secrets["NOTION_TOKEN"]
