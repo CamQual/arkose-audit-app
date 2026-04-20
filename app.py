@@ -36,15 +36,13 @@ SALLES_ARKOSE = {
 st.set_page_config(page_title="Arkose Quality Audit", page_icon="🧗")
 st.title("🧗 Audit Qualité Arkose")
 
-# Récupération des clés sécurisées
-try:
-    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-    NOTION_TOKEN = st.secrets["NOTION_TOKEN"]
-except:
-    st.error("Clés API manquantes dans les Secrets de Streamlit.")
+# Vérification des secrets
+if "GEMINI_API_KEY" not in st.secrets or "NOTION_TOKEN" not in st.secrets:
+    st.error("⚠️ Les clés API ne sont pas configurées dans les secrets Streamlit.")
     st.stop()
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+NOTION_TOKEN = st.secrets["NOTION_TOKEN"]
 
 # 1. Choix de la salle
 salle_selectionnee = st.selectbox("Dans quel établissement es-tu ?", list(SALLES_ARKOSE.keys()))
@@ -52,6 +50,32 @@ db_id = SALLES_ARKOSE[salle_selectionnee]
 
 # 2. Enregistrement / Upload
 audio_file = st.file_uploader("Enregistre ou dépose ton audio d'audit", type=['mp3', 'm4a', 'wav', 'mp4'])
+
+# Fonction d'envoi vers Notion
+def push_to_notion(data, database_id):
+    url = "https://api.notion.com/v1/pages"
+    headers = {
+        "Authorization": f"Bearer {NOTION_TOKEN}",
+        "Content-Type": "application/json",
+        "Notion-Version": "2022-06-28"
+    }
+    
+    payload = {
+        "parent": {"database_id": database_id},
+        "properties": {
+            "Nom de la tâche": {"title": [{"text": {"content": data.get("nom_de_la_tache", "Sans titre")}}]},
+            "Établissement": {"select": {"name": salle_selectionnee}},
+            "Liste source": {"select": {"name": data.get("liste_source", "Accueil")}},
+            "Projet source": {"rich_text": [{"text": {"content": f"Audit Interne {salle_selectionnee.upper()}"}}]},
+            "ITEM": {"select": {"name": data.get("item", "Process")}},
+            "Pôle concerné": {"select": {"name": data.get("pole_concerne", "Exploitation")}},
+            "Prise en charge": {"select": {"name": data.get("prise_en_charge", "Staff")}},
+            "Criticité": {"select": {"name": data.get("criticite", "Moyenne")}},
+            "Red flag": {"select": {"name": "Oui" if data.get("red_flag") else "Non"}},
+            "confiance qualification": {"rich_text": [{"text": {"content": data.get("confiance_qualification", "Camille")}}]}
+        }
+    }
+    return requests.post(url, json=payload, headers=headers)
 
 if audio_file and st.button("🚀 Analyser et envoyer à Notion"):
     with st.spinner("L'IA écoute et prépare les fiches Notion..."):
@@ -62,3 +86,7 @@ if audio_file and st.button("🚀 Analyser et envoyer à Notion"):
             
             # Analyse Gemini
             uploaded_file = client.files.upload(file="temp_audio.m4a")
+            
+            # Prompt sans f-string pour éviter les erreurs d'accolades
+            prompt_systeme = """
+            Tu es l'assistant expert Arkose. Analyse l'audio pour l'établissement : """ + salle_selectionnee + """
