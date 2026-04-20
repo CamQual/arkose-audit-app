@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 import re
 
-# --- CONFIGURATION DES SALLES ---
+# --- CONFIGURATION ---
 SALLES_ARKOSE = {
     "Montreuil": "342457aab0148128933fe069f5899250",
     "Bordeaux": "342457aab01481c29bb2f231d970f528",
@@ -55,7 +55,7 @@ def push_to_notion(data, database_id, salle_nom):
             "Établissement": {"select": {"name": salle_nom.upper()}},
             "Liste source": {"select": {"name": str(data.get("liste_source", "Accueil"))}},
             "Projet source": {"rich_text": [{"text": {"content": f"Audit interne {salle_nom.upper()}"}}]},
-            "Statut": {"status": {"name": str(data.get("statut", "Active"))}},
+            "Statut": {"status": {"name": "Saisie"}},
             "ITEM": {"select": {"name": str(data.get("item", "Process"))}},
             "Pôle concerné": {"select": {"name": str(data.get("pole_concerne", "Exploitation"))}},
             "Prise en charge": {"select": {"name": str(data.get("prise_en_charge", "Staff"))}},
@@ -69,25 +69,16 @@ def push_to_notion(data, database_id, salle_nom):
     return requests.post(url, json=payload, headers=headers)
 
 if audio and st.button("🚀 Envoyer"):
-    with st.spinner("Analyse intelligente en cours..."):
+    with st.spinner("Analyse et envoi..."):
         try:
             with open("temp.m4a", "wb") as f: f.write(audio.getbuffer())
             f_up = client.files.upload(file="temp.m4a")
             
-            prompt = """Tu es l'expert audit Arkose. Analyse l'audio et génère un JSON pour chaque tâche détectée.
-            OPTIONS POUR LES CHAMPS (respecte l'orthographe) :
-            - liste_source: Extérieur/terrasse, Accueil, Bar, Cantine, Cuisine, Toilettes Salle, Vestiaire, Fitness, Salle globale, shop, bien être.
-            - item: Accueil/Discours/Expé client, Image de marque, Propreté/hygiène/entretien, Process, Valorisation de l'offre.
-            - pole_concerne: Exploitation, Travaux/Maintenance, Escalade, Com&Market, Déco, Support IT, RH.
-            - prise_en_charge: Le night, Mail équipe support, Staff, Achat exploit, Prestataire extérieur.
-            - criticite: Faible (confort/esthétique), Moyenne (impact image/qualité), Critique (urgence).
-            - statut: Active, Cloturée.
+            prompt = f"Expert Arkose salle {salle}. Analyse l'audio. JSON obligatoire: nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag (bool)."
             
-            Format JSON: {"nom_de_la_tache": "...", "liste_source": "...", "item": "...", "pole_concerne": "...", "prise_en_charge": "...", "criticite": "...", "red_flag": true/false, "statut": "Active", "confiance_qualification": "Camille"}
-            """
-            
+            # On utilise le modèle Flash le plus stable
             resp = client.models.generate_content(
-                model='gemini-flash-latest', 
+                model='gemini-1.5-flash-latest', 
                 contents=[f_up, prompt], 
                 config=types.GenerateContentConfig(response_mime_type="application/json")
             )
@@ -96,11 +87,9 @@ if audio and st.button("🚀 Envoyer"):
             items = data_json if isinstance(data_json, list) else [data_json]
 
             for item in items:
-                r = push_to_notion(item, db_id, salle)
-                if r.status_code == 200:
-                    st.success(f"✅ Tâche '{item.get('nom_de_la_tache')}' ajoutée avec tous ses détails !")
-                else:
-                    st.error(f"Erreur : {r.text}")
+                push_to_notion(item, db_id, salle)
+            
+            st.success("✅ Audit envoyé à Notion !")
 
         except Exception as e:
             st.error(f"Erreur : {e}")
