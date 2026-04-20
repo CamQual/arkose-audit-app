@@ -33,15 +33,65 @@ SALLES_ARKOSE = {
     "Saint Denis - CAO": "342457aab01481dc8ebbf88df7c120a8"
 }
 
-st.set_page_config(page_title="Audit Arkose", page_icon="🧗")
-st.title("🧗 Audit Qualité Arkose -> Notion")
+st.set_page_config(page_title="Audit Arkose", page_icon="🧗", layout="centered")
+
+# --- STYLE ARKOSE ---
+st.markdown("""
+    <style>
+    /* Import d'une police proche de Roc Grotesk si non installée */
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;700&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Helvetica Neue', 'Helvetica', 'Arial', sans-serif;
+    }
+    
+    h1, h2, h3 {
+        font-family: 'Roc Grotesk', 'Outfit', sans-serif !important;
+        font-weight: 500;
+        color: #1a1a1a;
+    }
+    
+    /* Style des boutons avec le contour violet Arkose */
+    div.stButton > button {
+        border: 2px solid #841bf3 !important;
+        border-radius: 12px !important;
+        padding: 0.5rem 2rem !important;
+        color: #841bf3 !important;
+        background-color: transparent !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease;
+    }
+    
+    div.stButton > button:hover {
+        background-color: #841bf3 !important;
+        color: white !important;
+        border-color: #841bf3 !important;
+    }
+
+    /* Style de l'upload */
+    .stFileUploader {
+        border: 1px dashed #841bf3;
+        border-radius: 10px;
+        padding: 10px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- HEADER ---
+st.image("arkose_header.png", use_container_width=True)
+st.title("🧗 Audit Qualité Arkose")
 
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 token = st.secrets["NOTION_TOKEN"]
 
-salle = st.selectbox("Établissement :", list(SALLES_ARKOSE.keys()))
-db_id = SALLES_ARKOSE[salle]
-audio = st.file_uploader("Audio", type=['mp3', 'm4a', 'wav', 'mp4'])
+# --- INTERFACE ---
+col1, col2 = st.columns([1, 1])
+with col1:
+    salle_selectionnee = st.selectbox("Établissement :", list(SALLES_ARKOSE.keys()))
+with col2:
+    audio = st.file_uploader("Enregistrement audio", type=['mp3', 'm4a', 'wav', 'mp4'])
+
+db_id = SALLES_ARKOSE[salle_selectionnee]
 
 def push_to_notion(data, database_id, salle_nom):
     url = "https://api.notion.com/v1/pages"
@@ -52,44 +102,70 @@ def push_to_notion(data, database_id, salle_nom):
         "parent": {"database_id": database_id},
         "properties": {
             "Nom de la tâche": {"title": [{"text": {"content": str(data.get("nom_de_la_tache", "Sans titre"))}}]},
-            "Établissement": {"select": {"name": salle_nom.upper()}},
-            "Liste source": {"select": {"name": str(data.get("liste_source", "Accueil"))}},
-            "Projet source": {"rich_text": [{"text": {"content": f"Audit interne {salle_nom.upper()}"}}]},
+            "Établissement": {"select": {"name": salle_nom}},
+            "La liste source": {"select": {"name": str(data.get("liste_source", "Accueil"))}},
+            "Projet source": {"rich_text": [{"text": {"content": f"Audit Interne {salle_nom.upper()}"}}]},
             "Statut": {"status": {"name": "Saisie"}},
             "ITEM": {"select": {"name": str(data.get("item", "Process"))}},
-            "Pôle concerné": {"select": {"name": str(data.get("pole_concerne", "Exploitation"))}},
-            "Prise en charge": {"select": {"name": str(data.get("prise_en_charge", "Staff"))}},
-            "Criticité": {"select": {"name": str(data.get("criticite", "Moyenne"))}},
+            "Pole concerné": {"select": {"name": str(data.get("pole_concerne", "Exploitation"))}},
+            "La prise en charge": {"select": {"name": str(data.get("prise_en_charge", "Staff"))}},
+            "criticité": {"select": {"name": str(data.get("criticite", "Moyenne"))}},
             "Red flag": {"select": {"name": "Oui" if data.get("red_flag") else "Non"}},
             "Date de créa Notion": {"date": {"start": date_jour}},
             "MAJ tâche NOTION": {"date": {"start": date_jour}},
-            "Confiance qualification": {"rich_text": [{"text": {"content": str(data.get("confiance_qualification", "Camille"))}}]}
+            "confiance qualification": {"rich_text": [{"text": {"content": str(data.get("confiance_qualification", "Camille"))}}]}
         }
     }
     return requests.post(url, json=payload, headers=headers)
 
-if audio and st.button("🚀 Envoyer"):
-    with st.spinner("Analyse et envoi..."):
+if audio and st.button("🚀 Lancer l'analyse"):
+    with st.spinner("L'IA analyse l'audio et prépare les fiches..."):
         try:
-            with open("temp.m4a", "wb") as f: f.write(audio.getbuffer())
+            with open("temp.m4a", "wb") as f: 
+                f.write(audio.getbuffer())
+            
             f_up = client.files.upload(file="temp.m4a")
             
-            prompt = f"Expert Arkose salle {salle}. Analyse l'audio. JSON obligatoire: nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag (bool)."
-            
-            # On utilise le modèle Flash le plus stable
+            prompt_systeme = f"""Tu es l'assistant expert en audit qualité d'Arkose. 
+Analyse l'audio pour l'établissement {salle_selectionnee}. 
+Structure le résultat en JSON pour Notion.
+
+### RÈGLES :
+1. Nettoyage : Supprime les tics de langage.
+2. Reformulation : Le "nom_de_la_tache" doit être court et pédagogique.
+3. Vocabulaire : "Corner" -> "shop", "Studio" -> "bien être".
+4. Pôle par défaut : "Exploitation".
+
+### JSON ATTENDU (Minuscules) :
+{{
+  "nom_de_la_tache": "...",
+  "liste_source": "...",
+  "item": "...",
+  "pole_concerne": "...",
+  "prise_en_charge": "...",
+  "criticite": "...",
+  "red_flag": boolean,
+  "confiance_qualification": "..."
+}}"""
+
+            # Utilisation de Gemini 2.5 Flash pour une analyse optimale
             resp = client.models.generate_content(
-                model='gemini-1.5-flash-latest', 
-                contents=[f_up, prompt], 
-                config=types.GenerateContentConfig(response_mime_type="application/json")
+                model='gemini-2.5-flash', 
+                contents=[f_up, "Analyse cet audit."], 
+                config=types.GenerateContentConfig(
+                    system_instruction=prompt_systeme,
+                    response_mime_type="application/json"
+                )
             )
             
             data_json = json.loads(resp.text)
             items = data_json if isinstance(data_json, list) else [data_json]
 
             for item in items:
-                push_to_notion(item, db_id, salle)
+                push_to_notion(item, db_id, salle_selectionnee)
             
-            st.success("✅ Audit envoyé à Notion !")
+            st.balloons()
+            st.success(f"✅ {len(items)} audit(s) envoyé(s) avec succès pour {salle_selectionnee} !")
 
         except Exception as e:
-            st.error(f"Erreur : {e}")
+            st.error(f"Erreur lors de l'analyse : {e}")
