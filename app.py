@@ -4,6 +4,8 @@ from google.genai import types
 import requests
 import json
 from datetime import datetime
+import base64
+import os
 
 # --- CONFIGURATION DES SALLES ---
 SALLES_ARKOSE = {
@@ -34,40 +36,75 @@ SALLES_ARKOSE = {
 
 st.set_page_config(page_title="Audit Arkose", page_icon="🧗", layout="centered")
 
-# --- DESIGN & POLICES ---
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap');
+# --- CHARGEMENT DES FICHIERS LOCAUX (FOND ET POLICES) ---
+def load_custom_assets():
+    css_string = "<style>\n"
 
-    .stApp {
-        background: linear-gradient(rgba(0,0,0,0.75), rgba(0,0,0,0.75)), 
-                    url("https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2070&auto=format&fit=crop");
-        background-size: cover;
-        background-attachment: fixed;
+    # 1. Image de fond (fond.jpg)
+    if os.path.exists("fond.jpg"):
+        with open("fond.jpg", "rb") as img_file:
+            b64_img = base64.b64encode(img_file.read()).decode()
+        css_string += f"""
+        .stApp {{
+            background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), url("data:image/jpeg;base64,{b64_img}");
+            background-size: cover;
+            background-attachment: fixed;
+        }}
+        """
+    else:
+        # Couleur noire de secours si l'image n'est pas encore sur GitHub
+        css_string += ".stApp { background-color: #1a1a1a; }\n"
+
+    # 2. Police Roc Grotesk
+    font_path_roc = "RocGrotesk.ttf" if os.path.exists("RocGrotesk.ttf") else "RocGrotesk.otf"
+    if os.path.exists(font_path_roc):
+        with open(font_path_roc, "rb") as f:
+            b64_font = base64.b64encode(f.read()).decode()
+        ext = "opentype" if font_path_roc.endswith(".otf") else "truetype"
+        css_string += f"""
+        @font-face {{
+            font-family: 'Roc Grotesk Custom';
+            src: url(data:font/{font_path_roc.split('.')[-1]};charset=utf-8;base64,{b64_font}) format('{ext}');
+        }}
+        """
+
+    # 3. Police Helvetica Neue
+    font_path_helv = "HelveticaNeue.ttf" if os.path.exists("HelveticaNeue.ttf") else "HelveticaNeue.otf"
+    if os.path.exists(font_path_helv):
+        with open(font_path_helv, "rb") as f:
+            b64_font = base64.b64encode(f.read()).decode()
+        ext = "opentype" if font_path_helv.endswith(".otf") else "truetype"
+        css_string += f"""
+        @font-face {{
+            font-family: 'Helvetica Neue Custom';
+            src: url(data:font/{font_path_helv.split('.')[-1]};charset=utf-8;base64,{b64_font}) format('{ext}');
+        }}
+        """
+
+    # --- RÈGLES DE STYLE GLOBALES ---
+    css_string += """
+    /* Titre : Plus petit, Roc Grotesk, sans majuscules forcées */
+    h1 {
+        font-family: 'Roc Grotesk Custom', sans-serif !important;
+        font-weight: 800 !important;
+        text-transform: none !important; 
+        color: white !important;
+        font-size: 2.2rem !important; 
+        margin-bottom: 2rem !important;
     }
 
-    h1 {
-        font-family: 'Inter', sans-serif !important;
-        font-weight: 900 !important;
-        text-transform: uppercase;
-        color: white !important;
-        letter-spacing: -2px;
-        line-height: 1.1;
-        margin-bottom: 2.5rem !important;
+    /* Reste du texte : Helvetica Neue */
+    p, label, span, div, .stMarkdown, button {
+        font-family: 'Helvetica Neue Custom', 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
     }
 
     label p {
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
         color: white !important;
         font-weight: 700 !important;
         font-size: 1.1rem !important;
-        text-transform: none !important;
     }
 
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 15px;
-    }
-
+    .stTabs [data-baseweb="tab-list"] { gap: 15px; }
     .stTabs [data-baseweb="tab"] {
         height: 50px;
         background-color: rgba(255,255,255,0.05);
@@ -75,7 +112,6 @@ st.markdown("""
         color: white;
         border: 1px solid rgba(132, 27, 243, 0.2);
     }
-
     .stTabs [aria-selected="true"] {
         background-color: rgba(132, 27, 243, 0.3) !important;
         border-bottom: 3px solid #841bf3 !important;
@@ -86,7 +122,7 @@ st.markdown("""
         padding: 15px;
         border: 1px solid #841bf3 !important;
         border-radius: 12px;
-        background-color: rgba(0,0,0,0.4);
+        background-color: rgba(0,0,0,0.6);
     }
 
     .stButton>button {
@@ -94,14 +130,11 @@ st.markdown("""
         background-color: #841bf3 !important;
         color: white !important;
         font-weight: 700 !important;
-        font-family: 'Helvetica Neue', sans-serif !important;
         border-radius: 12px;
         padding: 1.2rem;
         width: 100%;
         margin-top: 3rem;
-        text-transform: none !important;
     }
-    
     .stButton>button:hover {
         box-shadow: 0 0 30px rgba(132, 27, 243, 0.7);
     }
@@ -111,16 +144,20 @@ st.markdown("""
         background-color: rgba(0,0,0,0.8) !important;
         border-radius: 12px;
     }
-</style>
-""", unsafe_allow_html=True)
+    </style>
+    """
+    st.markdown(css_string, unsafe_allow_html=True)
+
+# Lancement de la fonction de style
+load_custom_assets()
 
 # --- BANNIÈRE ---
 try:
     st.image("banniere audit interne.jpg", use_container_width=True)
 except Exception:
-    st.info("💡 N'oublie pas d'ajouter le fichier 'banniere audit interne.jpg' sur ton GitHub pour voir la bannière apparaître ici.")
+    pass
 
-st.title("Listing Audit Interne -> Notion")
+st.title("Listing Audit interne -> Notion")
 
 # --- LOGIQUE ---
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
@@ -131,7 +168,7 @@ db_id = SALLES_ARKOSE[salle_nom]
 
 st.write("") 
 
-# --- TABS HARMONISÉS ---
+# --- TABS ---
 tab_micro, tab_file = st.tabs(["🎤 Enregistrer", "📂 Uploader"])
 
 with tab_micro:
