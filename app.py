@@ -82,7 +82,7 @@ if audio_file and st.button("🚀 Analyser et envoyer"):
             Renvoie un JSON avec : nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag (booléen), confiance_qualification."""
 
             response = client.models.generate_content(
-                model='gemini-1.5-flash', # On passe sur le tout dernier modèle dispo
+                model='gemini-flash-latest', # On passe sur le tout dernier modèle dispo
                 contents=[uploaded_file, prompt],
                 config=types.GenerateContentConfig(response_mime_type="application/json")
             )
