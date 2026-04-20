@@ -47,7 +47,7 @@ st.markdown("""
         background-attachment: fixed;
     }
 
-    /* Titre (Style Roc Grotesk) */
+    /* Titre (Style Roc Grotesk via Inter 900) */
     h1 {
         font-family: 'Inter', sans-serif !important;
         font-weight: 900 !important;
@@ -114,7 +114,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- BANNIÈRE (On garde la tienne car elle marche !) ---
+# --- BANNIÈRE ---
 try:
     st.image("banniere audit interne.jpg", use_container_width=True)
 except Exception:
@@ -159,4 +159,31 @@ def push_to_notion(data, database_id, name):
             "Statut": {"status": {"name": "Saisie"}},
             "ITEM": {"select": {"name": str(data.get("item", "Process"))}},
             "Pôle concerné": {"select": {"name": str(data.get("pole_concerne", "Exploitation"))}},
-            "Prise en charge": {"select": {"name": str(data.get("prise_en_charge",
+            "Prise en charge": {"select": {"name": str(data.get("prise_en_charge", "Staff"))}},
+            "Criticité": {"select": {"name": str(data.get("criticite", "Moyenne"))}},
+            "Red flag": {"select": {"name": "Oui" if data.get("red_flag") else "Non"}},
+            "Date de créa Notion": {"date": {"start": date_jour}},
+            "MAJ tâche NOTION": {"date": {"start": date_jour}},
+            "Confiance qualification": {"rich_text": [{"text": {"content": "Camille"}}]}
+        }
+    }
+    return requests.post(url, json=payload, headers=headers)
+
+if final_audio:
+    if st.button("Lancer l'analyse vers Notion"):
+        with st.spinner("Analyse et envoi..."):
+            try:
+                with open("temp.m4a", "wb") as f:
+                    f.write(final_audio.getbuffer())
+                
+                f_up = client.files.upload(file="temp.m4a")
+                prompt = "Expert Arkose. Analyse l'audio. JSON obligatoire: nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag(bool)."
+                
+                resp = client.models.generate_content(
+                    model='gemini-1.5-flash-latest',
+                    contents=[f_up, prompt],
+                    config=types.GenerateContentConfig(response_mime_type="application/json")
+                )
+                
+                items = json.loads(resp.text)
+                if not isinstance(items, list
