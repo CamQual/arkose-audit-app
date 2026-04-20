@@ -34,104 +34,34 @@ SALLES_ARKOSE = {
 }
 
 # --- INTERFACE ET DESIGN ---
-st.set_page_config(page_title="Audit Qualité Arkose", page_icon="🧗")
+st.set_page_config(page_title="Audit Qualité Arkose", page_icon="🧗", layout="centered")
 
+# CSS sans f-string pour éviter les erreurs de compilation
 st.markdown(
     """
     <style>
     .stApp {
-        background-image: url("https://images.adobe.com/content/dam/cc/us/en/creative-cloud/stock/stock-home/AdobeStock_271556185.jpg");
+        background-image: url("https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2070&auto=format&fit=crop");
         background-size: cover;
         background-position: center;
+        background-attachment: fixed;
     }
+    
     h1 {
-        font-family: 'Roc Grotesk medium', sans-serif !important;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
         color: white !important;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.7);
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: -1px;
     }
+    
     p, label, .stMarkdown {
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
         color: #f0f0f0 !important;
+        font-weight: 500;
     }
-    .stButton>button {
-        border: 2px solid #841bf3 !important;
-        background-color: rgba(132, 27, 243, 0.1) !important;
-        color: white !important;
-        font-weight: bold;
-        border-radius: 8px;
-    }
-    .stSelectbox div[data-baseweb="select"], .stFileUploader section {
-        border: 2px solid #841bf3 !important;
-        background-color: rgba(0,0,0,0.6) !important;
-        border-radius: 8px;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-st.title("🧗 Audit Qualité Arkose")
-
-# --- LOGIQUE ---
-client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-NOTION_TOKEN = st.secrets["NOTION_TOKEN"]
-
-salle_selectionnee = st.selectbox("Établissement :", list(SALLES_ARKOSE.keys()))
-db_id = SALLES_ARKOSE[salle_selectionnee]
-audio_file = st.file_uploader("Audio d'audit", type=['mp3', 'm4a', 'wav', 'mp4'])
-
-def push_to_notion(data, database_id, salle):
-    url = "https://api.notion.com/v1/pages"
-    headers = {
-        "Authorization": "Bearer " + NOTION_TOKEN,
-        "Content-Type": "application/json",
-        "Notion-Version": "2022-06-28"
-    }
-    date_jour = datetime.now().strftime("%Y-%m-%d")
     
-    payload = {
-        "parent": {"database_id": database_id},
-        "properties": {
-            "Nom de la tâche": {"title": [{"text": {"content": str(data.get("nom_de_la_tache", "Sans titre"))}}]},
-            "Établissement": {"select": {"name": salle.upper()}},
-            "Liste source": {"select": {"name": str(data.get("liste_source", "Accueil"))}},
-            "Projet source": {"rich_text": [{"text": {"content": "Audit interne " + salle.upper()}}]},
-            "Statut": {"status": {"name": "Saisie"}},
-            "ITEM": {"select": {"name": str(data.get("item", "Process"))}},
-            "Pôle concerné": {"select": {"name": str(data.get("pole_concerne", "Exploitation"))}},
-            "Prise en charge": {"select": {"name": str(data.get("prise_en_charge", "Staff"))}},
-            "Criticité": {"select": {"name": str(data.get("criticite", "Moyenne"))}},
-            "Red flag": {"select": {"name": "Oui" if data.get("red_flag") else "Non"}},
-            "Date de créa Notion": {"date": {"start": date_jour}},
-            "MAJ tâche NOTION": {"date": {"start": date_jour}},
-            "Confiance qualification": {"rich_text": [{"text": {"content": str(data.get("confiance_qualification", "Camille"))}}]}
-        }
-    }
-    return requests.post(url, json=payload, headers=headers)
-
-if audio_file and st.button("🚀 Analyser et envoyer"):
-    with st.spinner("Analyse en cours..."):
-        try:
-            with open("temp.m4a", "wb") as f:
-                f.write(audio_file.getbuffer())
-            
-            uploaded_file = client.files.upload(file="temp.m4a")
-            
-            prompt = "Expert Arkose. Analyse l'audio. JSON obligatoire: nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag (bool), confiance_qualification."
-
-            response = client.models.generate_content(
-                model='gemini-1.5-flash-latest',
-                contents=[uploaded_file, prompt],
-                config=types.GenerateContentConfig(response_mime_type="application/json")
-            )
-
-            data_json = json.loads(response.text)
-            items = data_json if isinstance(data_json, list) else [data_json]
-
-            for item in items:
-                push_to_notion(item, db_id, salle_selectionnee)
-            
-            st.success("✅ Audit envoyé à Notion !")
-            
-        except Exception as e:
-            st.error("Erreur : " + str(e))
+    /* Boutons violets Arkose #841bf3 */
+    .stButton>button {
+        border: 2px solid #841bf3
