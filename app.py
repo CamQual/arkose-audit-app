@@ -36,7 +36,6 @@ SALLES_ARKOSE = {
 st.set_page_config(page_title="Audit Arkose", page_icon="🧗")
 st.title("🧗 Audit Qualité Arkose")
 
-# Secrets
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 token = st.secrets["NOTION_TOKEN"]
 
@@ -56,7 +55,7 @@ def push_to_notion(data, database_id, salle_nom):
             "Établissement": {"select": {"name": salle_nom.upper()}},
             "Liste source": {"select": {"name": str(data.get("liste_source", "Accueil"))}},
             "Projet source": {"rich_text": [{"text": {"content": f"Audit interne {salle_nom.upper()}"}}]},
-            "Statut": {"status": {"name": "Saisie"}},
+            "Statut": {"status": {"name": str(data.get("statut", "Active"))}},
             "ITEM": {"select": {"name": str(data.get("item", "Process"))}},
             "Pôle concerné": {"select": {"name": str(data.get("pole_concerne", "Exploitation"))}},
             "Prise en charge": {"select": {"name": str(data.get("prise_en_charge", "Staff"))}},
@@ -70,15 +69,22 @@ def push_to_notion(data, database_id, salle_nom):
     return requests.post(url, json=payload, headers=headers)
 
 if audio and st.button("🚀 Envoyer"):
-    with st.spinner("Analyse et envoi..."):
+    with st.spinner("Analyse intelligente en cours..."):
         try:
             with open("temp.m4a", "wb") as f: f.write(audio.getbuffer())
             f_up = client.files.upload(file="temp.m4a")
             
-            # Prompt optimisé
-            prompt = f"""Expert Arkose salle {salle}. Analyse l'audio. 
-            Règles: Corner->shop, Studio->bien être. 
-            JSON: nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag (bool), confiance_qualification."""
+            prompt = """Tu es l'expert audit Arkose. Analyse l'audio et génère un JSON pour chaque tâche détectée.
+            OPTIONS POUR LES CHAMPS (respecte l'orthographe) :
+            - liste_source: Extérieur/terrasse, Accueil, Bar, Cantine, Cuisine, Toilettes Salle, Vestiaire, Fitness, Salle globale, shop, bien être.
+            - item: Accueil/Discours/Expé client, Image de marque, Propreté/hygiène/entretien, Process, Valorisation de l'offre.
+            - pole_concerne: Exploitation, Travaux/Maintenance, Escalade, Com&Market, Déco, Support IT, RH.
+            - prise_en_charge: Le night, Mail équipe support, Staff, Achat exploit, Prestataire extérieur.
+            - criticite: Faible (confort/esthétique), Moyenne (impact image/qualité), Critique (urgence).
+            - statut: Active, Cloturée.
+            
+            Format JSON: {"nom_de_la_tache": "...", "liste_source": "...", "item": "...", "pole_concerne": "...", "prise_en_charge": "...", "criticite": "...", "red_flag": true/false, "statut": "Active", "confiance_qualification": "Camille"}
+            """
             
             resp = client.models.generate_content(
                 model='gemini-flash-latest', 
@@ -91,10 +97,10 @@ if audio and st.button("🚀 Envoyer"):
 
             for item in items:
                 r = push_to_notion(item, db_id, salle)
-                if r.status_code != 200:
-                    st.error(f"Erreur sur une tâche : {r.text}")
+                if r.status_code == 200:
+                    st.success(f"✅ Tâche '{item.get('nom_de_la_tache')}' ajoutée avec tous ses détails !")
                 else:
-                    st.success(f"✅ Tâche '{item.get('nom_de_la_tache')}' ajoutée !")
+                    st.error(f"Erreur : {r.text}")
 
         except Exception as e:
             st.error(f"Erreur : {e}")
