@@ -4,8 +4,9 @@ from google.genai import types
 import requests
 import json
 from datetime import datetime
+import re
 
-# --- CONFIGURATION DES SALLES ---
+# --- CONFIGURATION ---
 SALLES_ARKOSE = {
     "Montreuil": "342457aab0148128933fe069f5899250",
     "Bordeaux": "342457aab01481c29bb2f231d970f528",
@@ -32,73 +33,68 @@ SALLES_ARKOSE = {
     "Saint Denis - CAO": "342457aab01481dc8ebbf88df7c120a8"
 }
 
-# --- INTERFACE STREAMLIT ---
 st.set_page_config(page_title="Arkose Quality Audit", page_icon="🧗")
 st.title("🧗 Audit Qualité Arkose")
 
-# Vérification des secrets
 if "GEMINI_API_KEY" not in st.secrets or "NOTION_TOKEN" not in st.secrets:
-    st.error("⚠️ Configurer les secrets GEMINI_API_KEY et NOTION_TOKEN.")
+    st.error("⚠️ Secrets manquants.")
     st.stop()
 
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 NOTION_TOKEN = st.secrets["NOTION_TOKEN"]
 
-# 1. Choix de la salle
-salle_selectionnee = st.selectbox("Dans quel établissement es-tu ?", list(SALLES_ARKOSE.keys()))
+salle_selectionnee = st.selectbox("Établissement :", list(SALLES_ARKOSE.keys()))
 db_id = SALLES_ARKOSE[salle_selectionnee]
-
-# 2. Upload
 audio_file = st.file_uploader("Audio d'audit", type=['mp3', 'm4a', 'wav', 'mp4'])
 
 def push_to_notion(data, database_id, salle):
     url = "https://api.notion.com/v1/pages"
-    headers = {
-        "Authorization": f"Bearer {NOTION_TOKEN}",
-        "Content-Type": "application/json",
-        "Notion-Version": "2022-06-28"
-    }
+    headers = {"Authorization": f"Bearer {NOTION_TOKEN}", "Content-Type": "application/json", "Notion-Version": "2022-06-28"}
+    
     payload = {
         "parent": {"database_id": database_id},
         "properties": {
-            "Nom de la tâche": {"title": [{"text": {"content": data.get("nom_de_la_tache", "Sans titre")}}]},
+            "Nom de la tâche": {"title": [{"text": {"content": str(data.get("nom_de_la_tache", "Sans titre"))}}]},
             "Établissement": {"select": {"name": salle}},
-            "Liste source": {"select": {"name": data.get("liste_source", "Accueil")}},
+            "Liste source": {"select": {"name": str(data.get("liste_source", "Accueil"))}},
             "Projet source": {"rich_text": [{"text": {"content": f"Audit Interne {salle.upper()}"}}]},
-            "ITEM": {"select": {"name": data.get("item", "Process")}},
-            "Pôle concerné": {"select": {"name": data.get("pole_concerne", "Exploitation")}},
-            "Prise en charge": {"select": {"name": data.get("prise_en_charge", "Staff")}},
-            "Criticité": {"select": {"name": data.get("criticite", "Moyenne")}},
-            "Red flag": {"select": {"name": "Oui" if data.get("red_flag") else "Non"}},
-            "confiance qualification": {"rich_text": [{"text": {"content": data.get("confiance_qualification", "Camille")}}]}
+            "ITEM": {"select": {"name": str(data.get("item", "Process"))}},
+            "Pôle concerné": {"select": {"name": str(data.get("pole_concerne", "Exploitation"))}},
+            "Prise en charge": {"select": {"name": str(data.get("prise_en_charge", "Staff"))}},
+            "Criticité": {"select": {"name": str(data.get("criticite", "Moyenne"))}},
+            "Red flag": {"select": {"name": "Oui" if data.get("red_flag") == True else "Non"}},
+            "confiance qualification": {"rich_text": [{"text": {"content": str(data.get("confiance_qualification", "Camille"))}}]}
         }
     }
     return requests.post(url, json=payload, headers=headers)
 
 if audio_file and st.button("🚀 Analyser et envoyer"):
-    with st.spinner("Analyse en cours..."):
+    with st.spinner("Analyse Gemini en cours..."):
         try:
             with open("temp_audio.m4a", "wb") as f:
                 f.write(audio_file.getbuffer())
             
             uploaded_file = client.files.upload(file="temp_audio.m4a")
             
-            # Prompt simplifié pour éviter les bugs de guillemets
-            instructions = [
-                f"Tu es l'expert Arkose pour la salle {salle_selectionnee}.",
-                "Analyse l'audio et extrais les tâches.",
-                "Règle : Corner -> shop, Studio -> bien être.",
-                "Sortie : JSON pur avec clés: nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag (booléen), confiance_qualification."
-            ]
-            
+            prompt = f"""Tu es l'expert Arkose pour la salle {salle_selectionnee}.
+            Analyse l'audio et extrais les tâches.
+            Règles : Corner -> shop, Studio -> bien être.
+            Renvoie un JSON avec : nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag (booléen), confiance_qualification."""
+
             response = client.models.generate_content(
-                model='gemini-flash-latest',
-                contents=[uploaded_file, "Analyse cet audit."],
-                config=types.GenerateContentConfig(system_instruction="\n".join(instructions))
+                model='gemini-2.0-flash', # On passe sur le tout dernier modèle dispo
+                contents=[uploaded_file, prompt],
+                config=types.GenerateContentConfig(response_mime_type="application/json")
             )
 
-            res_text = response.text.replace('```json', '').replace('```', '').strip()
-            data_json = json.loads(res_text)
+            # Extraction robuste du JSON
+            raw_text = response.text.strip()
+            # On cherche le premier [ ou { pour ignorer le texte avant
+            match = re.search(r'[\{\[]', raw_text)
+            if match:
+                data_json = json.loads(raw_text[match.start():])
+            else:
+                data_json = json.loads(raw_text)
 
             if isinstance(data_json, list):
                 for item in data_json:
@@ -106,7 +102,8 @@ if audio_file and st.button("🚀 Analyser et envoyer"):
             else:
                 push_to_notion(data_json, db_id, salle_selectionnee)
 
-            st.success("✅ Audit envoyé avec succès !")
+            st.success("✅ Données envoyées à Notion !")
             
         except Exception as e:
             st.error(f"Erreur : {e}")
+            st.write("Réponse brute de l'IA (pour debug) :", response.text if 'response' in locals() else "Pas de réponse")
