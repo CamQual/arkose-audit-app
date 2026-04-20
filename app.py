@@ -186,4 +186,13 @@ if final_audio:
                 )
                 
                 items = json.loads(resp.text)
-                if not isinstance(items, list
+                
+                # Correction mise sur deux lignes pour éviter les soucis de copier/coller
+                if not isinstance(items, list):
+                    items = [items]
+                
+                for i in items:
+                    push_to_notion(i, db_id, salle_nom)
+                st.success(f"Audit synchronisé ! {len(items)} tâche(s) ajoutée(s).")
+            except Exception as e:
+                st.error(f"Erreur technique : {e}")
