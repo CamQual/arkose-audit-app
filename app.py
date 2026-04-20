@@ -4,6 +4,8 @@ from google.genai import types
 import requests
 import json
 from datetime import datetime
+import base64
+import os
 
 # --- CONFIGURATION DES SALLES ---
 SALLES_ARKOSE = {
@@ -34,65 +36,71 @@ SALLES_ARKOSE = {
 
 st.set_page_config(page_title="Audit Arkose", page_icon="🧗", layout="centered")
 
-# --- DESIGN INFAILLIBLE (WEB URLS) ---
-st.markdown("""
+# --- GESTION DE L'IMAGE DE FOND ---
+bg_css = ""
+nom_fichier_fond = "AdobeStock_271556185.jpg"
+
+if os.path.exists(nom_fichier_fond):
+    with open(nom_fichier_fond, "rb") as image_file:
+        encoded_string = base64.b64encode(image_file.read()).decode()
+    bg_css = f"""
+    .stApp {{
+        background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), 
+                    url("data:image/jpeg;base64,{encoded_string}");
+        background-size: cover;
+        background-attachment: fixed;
+    }}
+    """
+else:
+    # Fond noir par défaut si l'image n'est pas encore uploadée sur GitHub
+    bg_css = """
+    .stApp {
+        background-color: #121212;
+    }
+    """
+
+# --- DESIGN ET POLICES ---
+st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap');
 
-    /* Fond noir grainé assuré */
-    .stApp {
-        background: linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.8)), 
-                    url("https://images.unsplash.com/photo-1550684848-fac1c5b4e853?q=80&w=2070&auto=format&fit=crop");
-        background-size: cover;
-        background-attachment: fixed;
-    }
-
-    /* Titre (Style Roc Grotesk via Inter 900) */
-    h1 {
-        font-family: 'Inter', sans-serif !important;
-        font-weight: 900 !important;
-        text-transform: none !important;
-        color: white !important;
-        letter-spacing: -2px;
-        font-size: 2.2rem !important;
-        margin-bottom: 2rem !important;
-    }
+    {bg_css}
 
     /* Reste du texte : Helvetica Neue */
-    p, label, span, div, .stMarkdown, button {
+    p, label, span, div, .stMarkdown, button {{
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
-    }
+    }}
 
-    label p {
+    label p {{
         color: white !important;
         font-weight: 700 !important;
         font-size: 1.1rem !important;
-    }
+    }}
 
     /* Harmonisation des onglets */
-    .stTabs [data-baseweb="tab-list"] { gap: 15px; }
-    .stTabs [data-baseweb="tab"] {
+    .stTabs [data-baseweb="tab-list"] {{ gap: 15px; }}
+    .stTabs [data-baseweb="tab"] {{
         height: 50px;
         background-color: rgba(255,255,255,0.05);
         border-radius: 8px 8px 0px 0px;
         color: white;
         border: 1px solid rgba(132, 27, 243, 0.2);
-    }
-    .stTabs [aria-selected="true"] {
+    }}
+    .stTabs [aria-selected="true"] {{
         background-color: rgba(132, 27, 243, 0.3) !important;
         border-bottom: 3px solid #841bf3 !important;
-    }
+    }}
 
     /* Formulaires et Boutons */
-    .stAudioInput {
+    .stAudioInput {{
         margin-top: 20px;
         padding: 15px;
         border: 1px solid #841bf3 !important;
         border-radius: 12px;
         background-color: rgba(0,0,0,0.6);
-    }
+    }}
 
-    .stButton>button {
+    .stButton>button {{
         border: none !important;
         background-color: #841bf3 !important;
         color: white !important;
@@ -101,16 +109,16 @@ st.markdown("""
         padding: 1.2rem;
         width: 100%;
         margin-top: 3rem;
-    }
-    .stButton>button:hover {
+    }}
+    .stButton>button:hover {{
         box-shadow: 0 0 30px rgba(132, 27, 243, 0.7);
-    }
+    }}
 
-    .stSelectbox div[data-baseweb="select"], .stFileUploader section {
+    .stSelectbox div[data-baseweb="select"], .stFileUploader section {{
         border: 1px solid #841bf3 !important;
         background-color: rgba(0,0,0,0.8) !important;
         border-radius: 12px;
-    }
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -120,7 +128,7 @@ try:
 except Exception:
     pass
 
-st.title("Listing Audit interne → Notion")
+# Note : Le titre texte st.title() a été supprimé ici !
 
 # --- LOGIQUE ---
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
@@ -187,7 +195,6 @@ if final_audio:
                 
                 items = json.loads(resp.text)
                 
-                # Correction mise sur deux lignes pour éviter les soucis de copier/coller
                 if not isinstance(items, list):
                     items = [items]
                 
