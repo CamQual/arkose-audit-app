@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 import re
 
-# --- CONFIGURATION ---
+# --- CONFIGURATION DES SALLES ---
 SALLES_ARKOSE = {
     "Montreuil": "342457aab0148128933fe069f5899250",
     "Bordeaux": "342457aab01481c29bb2f231d970f528",
@@ -36,6 +36,7 @@ SALLES_ARKOSE = {
 st.set_page_config(page_title="Audit Arkose", page_icon="🧗")
 st.title("🧗 Audit Qualité Arkose")
 
+# Secrets
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 token = st.secrets["NOTION_TOKEN"]
 
@@ -43,34 +44,57 @@ salle = st.selectbox("Établissement :", list(SALLES_ARKOSE.keys()))
 db_id = SALLES_ARKOSE[salle]
 audio = st.file_uploader("Audio", type=['mp3', 'm4a', 'wav', 'mp4'])
 
+def push_to_notion(data, database_id, salle_nom):
+    url = "https://api.notion.com/v1/pages"
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Notion-Version": "2022-06-28"}
+    date_jour = datetime.now().strftime("%Y-%m-%d")
+    
+    payload = {
+        "parent": {"database_id": database_id},
+        "properties": {
+            "Nom de la tâche": {"title": [{"text": {"content": str(data.get("nom_de_la_tache", "Sans titre"))}}]},
+            "Établissement": {"select": {"name": salle_nom.upper()}},
+            "Liste source": {"select": {"name": str(data.get("liste_source", "Accueil"))}},
+            "Projet source": {"rich_text": [{"text": {"content": f"Audit interne {salle_nom.upper()}"}}]},
+            "Statut": {"status": {"name": "Saisie"}},
+            "ITEM": {"select": {"name": str(data.get("item", "Process"))}},
+            "Pôle concerné": {"select": {"name": str(data.get("pole_concerne", "Exploitation"))}},
+            "Prise en charge": {"select": {"name": str(data.get("prise_en_charge", "Staff"))}},
+            "Criticité": {"select": {"name": str(data.get("criticite", "Moyenne"))}},
+            "Red flag": {"select": {"name": "Oui" if data.get("red_flag") else "Non"}},
+            "Date de créa Notion": {"date": {"start": date_jour}},
+            "MAJ tâche NOTION": {"date": {"start": date_jour}},
+            "Confiance qualification": {"rich_text": [{"text": {"content": str(data.get("confiance_qualification", "Camille"))}}]}
+        }
+    }
+    return requests.post(url, json=payload, headers=headers)
+
 if audio and st.button("🚀 Envoyer"):
-    with st.spinner("Analyse..."):
+    with st.spinner("Analyse et envoi..."):
         try:
             with open("temp.m4a", "wb") as f: f.write(audio.getbuffer())
             f_up = client.files.upload(file="temp.m4a")
             
-            prompt = f"Expert Arkose salle {salle}. Extrais les tâches en JSON: nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag (bool)."
-            resp = client.models.generate_content(model='gemini-flash-latest', contents=[f_up, prompt], config=types.GenerateContentConfig(response_mime_type="application/json"))
+            # Prompt optimisé
+            prompt = f"""Expert Arkose salle {salle}. Analyse l'audio. 
+            Règles: Corner->shop, Studio->bien être. 
+            JSON: nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag (bool), confiance_qualification."""
+            
+            resp = client.models.generate_content(
+                model='gemini-flash-latest', 
+                contents=[f_up, prompt], 
+                config=types.GenerateContentConfig(response_mime_type="application/json")
+            )
             
             data_json = json.loads(resp.text)
             items = data_json if isinstance(data_json, list) else [data_json]
 
             for item in items:
-                payload = {
-                    "parent": {"database_id": db_id},
-                    "properties": {
-                        "Nom de la tâche": {"title": [{"text": {"content": str(item.get("nom_de_la_tache", "Sans titre"))}}]},
-                        "Établissement": {"select": {"name": salle.upper()}},
-                        "Projet source": {"rich_text": [{"text": {"content": f"Audit interne {salle.upper()}"}}]}
-                    }
-                }
-                # On envoie d'abord le minimum vital pour voir si la ligne se crée
-                r = requests.post("https://api.notion.com/v1/pages", json=payload, headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Notion-Version": "2022-06-28"})
-                
+                r = push_to_notion(item, db_id, salle)
                 if r.status_code != 200:
-                    st.error(f"Erreur Notion : {r.text}")
+                    st.error(f"Erreur sur une tâche : {r.text}")
                 else:
-                    st.success(f"✅ Ligne créée pour {salle} !")
+                    st.success(f"✅ Tâche '{item.get('nom_de_la_tache')}' ajoutée !")
 
         except Exception as e:
             st.error(f"Erreur : {e}")
