@@ -59,11 +59,10 @@ if audio_file and st.button("🚀 Analyser et envoyer à Notion"):
             # Analyse Gemini
             uploaded_file = client.files.upload(file="temp_audio.m4a")
             
-            # TON PROMPT (Intégré ici)
-            prompt_systeme = f"""Tu es l'assistant expert Arkose. Analyse l'audio pour l'établissement {salle_selectionnee}. 
-            Structure en JSON pour Notion. Tu es l'assistant expert en audit qualité d'Arkose. 
-Ta mission est de transcrire des notes vocales prises lors d'audits en établissements par Camille (Responsable Qualité) ou d'autres collaborateurs, et de les structurer en JSON pour une base de données Notion.
-
+            # On définit le prompt sans le "f" devant pour éviter l'erreur des accolades
+            prompt_systeme = """
+            Tu es l'assistant expert Arkose. Analyse l'audio pour l'établissement : """ + salle_selectionnee + """
+            
 ### RÈGLES DE TRAITEMENT :
 1. Nettoyage : Supprime les tics de langage ("euh", "bah", répétitions).
 2. Reformulation : Le "Nom de la tâche" doit être résumé en une phrase courte, objective et pédagogique pour les équipes.
@@ -97,7 +96,10 @@ Tu dois répondre UNIQUEMENT avec un objet JSON respectant scrupuleusement ces p
 ### ANALYSE DE LA CRITICITÉ :
 - Faible : Pas d'impact direct sur le parcours client ou l'hygiène.
 - Moyenne : Tâche visible, dégradation lente de l'image ou de la qualité, à régler sous quelques semaines.
-- Critique : Engagement de dégradations immédiates (moral, qualité, sécurité, hygiène grave)."""
+- Critique : Engagement de dégradations immédiates (moral, qualité, sécurité, hygiène grave).
+
+        Structure ta réponse UNIQUEMENT en JSON pur.
+            """"""
 
             response = client.models.generate_content(
                 model='gemini-flash-latest',
