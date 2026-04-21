@@ -52,12 +52,7 @@ if os.path.exists(nom_fichier_fond):
     }}
     """
 else:
-    # Fond noir par défaut si l'image n'est pas encore uploadée sur GitHub
-    bg_css = """
-    .stApp {
-        background-color: #121212;
-    }
-    """
+    bg_css = ".stApp { background-color: #121212; }"
 
 # --- DESIGN ET POLICES ---
 st.markdown(f"""
@@ -77,7 +72,6 @@ st.markdown(f"""
         font-size: 1.1rem !important;
     }}
 
-    /* Harmonisation des onglets */
     .stTabs [data-baseweb="tab-list"] {{ gap: 15px; }}
     .stTabs [data-baseweb="tab"] {{
         height: 50px;
@@ -91,7 +85,6 @@ st.markdown(f"""
         border-bottom: 3px solid #841bf3 !important;
     }}
 
-    /* Formulaires et Boutons */
     .stAudioInput {{
         margin-top: 20px;
         padding: 15px;
@@ -128,8 +121,6 @@ try:
 except Exception:
     pass
 
-# Note : Le titre texte st.title() a été supprimé ici !
-
 # --- LOGIQUE ---
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 token = st.secrets["NOTION_TOKEN"]
@@ -164,7 +155,7 @@ def push_to_notion(data, database_id, name):
             "Établissement": {"select": {"name": name.upper()}},
             "Liste source": {"select": {"name": str(data.get("liste_source", "Accueil"))}},
             "Projet source": {"rich_text": [{"text": {"content": f"Audit {name.upper()}"}}]},
-            "Statut": {"status": {"name": "Saisie"}},
+            "Statut": {"status": {"name": "A vérifier"}},
             "ITEM": {"select": {"name": str(data.get("item", "Process"))}},
             "Pôle concerné": {"select": {"name": str(data.get("pole_concerne", "Exploitation"))}},
             "Prise en charge": {"select": {"name": str(data.get("prise_en_charge", "Staff"))}},
