@@ -97,34 +97,3 @@ css_base = """
     .stFileUploader button {
         border-radius: 8px !important;
     }
-
-    .stAudioInput {
-        margin-top: 20px;
-        padding: 15px;
-        border: 1px solid #841bf3 !important;
-        border-radius: 12px;
-        background-color: rgba(0,0,0,0.6);
-    }
-
-    .stButton>button {
-        border: none !important;
-        background-color: #841bf3 !important;
-        color: white !important;
-        font-weight: 700 !important;
-        border-radius: 12px;
-        padding: 1.2rem;
-        width: 100%;
-        margin-top: 3rem;
-    }
-    .stButton>button:hover {
-        box-shadow: 0 0 30px rgba(132, 27, 243, 0.7);
-    }
-</style>
-"""
-
-st.markdown(bg_css_rule + css_base, unsafe_allow_html=True)
-
-# --- BANNIÈRE ---
-try:
-    chemin_banniere = os.path.join(dossier_script, "banniere audit interne.jpg")
-    st.image(chemin_banniere, use_container_
