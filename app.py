@@ -37,51 +37,47 @@ SALLES_ARKOSE = {
 st.set_page_config(page_title="Audit Arkose", page_icon="🧗", layout="centered")
 
 # --- GESTION DE L'IMAGE DE FOND ---
-bg_css = ""
+bg_css_rule = ""
 dossier_script = os.path.dirname(os.path.abspath(__file__))
 chemin_image = os.path.join(dossier_script, "AdobeStock_271556185.jpg")
 
 if os.path.exists(chemin_image):
     with open(chemin_image, "rb") as image_file:
         encoded_string = base64.b64encode(image_file.read()).decode()
-    bg_css = f"""
+    bg_css_rule = f"""
+    <style>
     .stApp {{
         background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), 
                     url("data:image/jpeg;base64,{encoded_string}");
         background-size: cover;
         background-attachment: fixed;
     }}
+    </style>
     """
 else:
-    bg_css = ".stApp { background-color: #121212; }"
-    fichiers_visibles = os.listdir(dossier_script)
+    bg_css_rule = "<style>.stApp { background-color: #121212; }</style>"
     st.error("⚠️ L'image de fond est introuvable pour le serveur.")
-    st.warning(f"Le script cherche exactement le nom : **AdobeStock_271556185.jpg**")
+    st.warning("Le script cherche exactement le nom : **AdobeStock_271556185.jpg**")
 
-# --- DESIGN ET POLICES CORRIGÉS ---
-st.markdown(f"""
+# --- DESIGN ET POLICES (Séparés pour éviter les bugs) ---
+css_base = """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap');
 
-    {bg_css}
-
-    /* Police globale plus sûre pour ne pas casser Streamlit */
-    html, body, [class*="st-"] {{
+    html, body, [class*="st-"] {
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
-    }}
+    }
 
-    /* Labels des champs (ex: Établissement) */
-    label p {{
+    label p {
         color: white !important;
         font-weight: 700 !important;
         font-size: 1.1rem !important;
-    }}
+    }
 
-    /* CORRECTION DES ONGLETS */
-    .stTabs [data-baseweb="tab-list"] {{ 
+    .stTabs [data-baseweb="tab-list"] { 
         gap: 15px; 
-    }}
-    .stTabs [data-baseweb="tab"] {{
+    }
+    .stTabs [data-baseweb="tab"] {
         height: auto !important;  
         padding: 12px 20px !important; 
         background-color: rgba(255,255,255,0.05);
@@ -89,7 +85,129 @@ st.markdown(f"""
         color: white !important;
         border: 1px solid rgba(132, 27, 243, 0.2);
         white-space: nowrap; 
-    }}
-    .stTabs [aria-selected="true"] {{
+    }
+    .stTabs [aria-selected="true"] {
         background-color: rgba(132, 27, 243, 0.3) !important;
-        border-bottom:
+        border-bottom: 3px solid #841bf3 !important;
+    }
+
+    .stSelectbox div[data-baseweb="select"], .stFileUploader section {
+        border: 1px solid #841bf3 !important;
+        background-color: rgba(0,0,0,0.8) !important;
+        border-radius: 12px;
+        padding: 5px;
+    }
+    
+    .stFileUploader button {
+        border-radius: 8px !important;
+    }
+
+    .stAudioInput {
+        margin-top: 20px;
+        padding: 15px;
+        border: 1px solid #841bf3 !important;
+        border-radius: 12px;
+        background-color: rgba(0,0,0,0.6);
+    }
+
+    .stButton>button {
+        border: none !important;
+        background-color: #841bf3 !important;
+        color: white !important;
+        font-weight: 700 !important;
+        border-radius: 12px;
+        padding: 1.2rem;
+        width: 100%;
+        margin-top: 3rem;
+    }
+    .stButton>button:hover {
+        box-shadow: 0 0 30px rgba(132, 27, 243, 0.7);
+    }
+</style>
+"""
+
+# Injection du CSS de manière sécurisée
+st.markdown(bg_css_rule + css_base, unsafe_allow_html=True)
+
+# --- BANNIÈRE ---
+try:
+    chemin_banniere = os.path.join(dossier_script, "banniere audit interne.jpg")
+    st.image(chemin_banniere, use_container_width=True)
+except Exception:
+    pass
+
+st.write("") 
+
+# --- LOGIQUE ---
+client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+token = st.secrets["NOTION_TOKEN"]
+
+salle_nom = st.selectbox("Établissement :", list(SALLES_ARKOSE.keys()))
+db_id = SALLES_ARKOSE[salle_nom]
+
+st.write("") 
+
+# --- TABS ---
+tab_micro, tab_file = st.tabs(["🎤 Enregistrer", "📂 Uploader"])
+
+with tab_micro:
+    st.write("Clique sur le micro pour parler :")
+    audio_record = st.audio_input("Capture vocale en direct")
+
+with tab_file:
+    st.write("Sélectionne ton fichier :")
+    audio_file = st.file_uploader("Fichier audio (mp3, m4a, wav)", type=['mp3', 'm4a', 'wav'])
+
+final_audio = audio_file if audio_file else audio_record
+
+def push_to_notion(data, database_id, name):
+    url = "https://api.notion.com/v1/pages"
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Notion-Version": "2022-06-28"}
+    date_jour = datetime.now().strftime("%Y-%m-%d")
+    
+    payload = {
+        "parent": {"database_id": database_id},
+        "properties": {
+            "Nom de la tâche": {"title": [{"text": {"content": str(data.get("nom_de_la_tache", "Sans titre"))}}]},
+            "Établissement": {"select": {"name": name.upper()}},
+            "Liste source": {"select": {"name": str(data.get("liste_source", "Accueil"))}},
+            "Projet source": {"rich_text": [{"text": {"content": f"Audit {name.upper()}"}}]},
+            "Statut": {"status": {"name": "A vérifier"}},
+            "ITEM": {"select": {"name": str(data.get("item", "Process"))}},
+            "Pôle concerné": {"select": {"name": str(data.get("pole_concerne", "Exploitation"))}},
+            "Prise en charge": {"select": {"name": str(data.get("prise_en_charge", "Staff"))}},
+            "Criticité": {"select": {"name": str(data.get("criticite", "Moyenne"))}},
+            "Red flag": {"select": {"name": "Oui" if data.get("red_flag") else "Non"}},
+            "Date de créa Notion": {"date": {"start": date_jour}},
+            "MAJ tâche NOTION": {"date": {"start": date_jour}},
+            "Confiance qualification": {"rich_text": [{"text": {"content": "Camille"}}]}
+        }
+    }
+    return requests.post(url, json=payload, headers=headers)
+
+if final_audio:
+    if st.button("Lancer l'analyse vers Notion"):
+        with st.spinner("Analyse et envoi..."):
+            try:
+                with open("temp.m4a", "wb") as f:
+                    f.write(final_audio.getbuffer())
+                
+                f_up = client.files.upload(file="temp.m4a")
+                prompt = "Expert Arkose. Analyse l'audio. JSON obligatoire: nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag(bool)."
+                
+                resp = client.models.generate_content(
+                    model='gemini-1.5-flash',
+                    contents=[f_up, prompt],
+                    config=types.GenerateContentConfig(response_mime_type="application/json")
+                )
+                
+                items = json.loads(resp.text)
+                
+                if not isinstance(items, list):
+                    items = [items]
+                
+                for i in items:
+                    push_to_notion(i, db_id, salle_nom)
+                st.success(f"Audit synchronisé ! {len(items)} tâche(s) ajoutée(s).")
+            except Exception as e:
+                st.error(f"Erreur technique : {e}")
