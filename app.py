@@ -36,9 +36,8 @@ SALLES_ARKOSE = {
 
 st.set_page_config(page_title="Audit Arkose", page_icon="🧗", layout="centered")
 
-# --- GESTION DE L'IMAGE DE FOND (MÉTHODE ROBUSTE) ---
+# --- GESTION DE L'IMAGE DE FOND ---
 bg_css = ""
-# On récupère le dossier exact où se trouve ce script app.py
 dossier_script = os.path.dirname(os.path.abspath(__file__))
 chemin_image = os.path.join(dossier_script, "AdobeStock_271556185.jpg")
 
@@ -54,43 +53,61 @@ if os.path.exists(chemin_image):
     }}
     """
 else:
-    # SI L'IMAGE N'EST PAS TROUVÉE, ON AFFICHE LE DÉBOGAGE
     bg_css = ".stApp { background-color: #121212; }"
     fichiers_visibles = os.listdir(dossier_script)
     st.error("⚠️ L'image de fond est introuvable pour le serveur.")
     st.warning(f"Le script cherche exactement le nom : **AdobeStock_271556185.jpg**")
-    st.info(f"Voici les fichiers que le serveur voit actuellement sur GitHub : {fichiers_visibles}")
 
-# --- DESIGN ET POLICES ---
+# --- DESIGN ET POLICES CORRIGÉS ---
 st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap');
 
     {bg_css}
 
-    p, label, span, div, .stMarkdown, button {{
+    /* Police globale plus sûre pour ne pas casser Streamlit */
+    html, body, [class*="st-"] {{
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
     }}
 
+    /* Labels des champs (ex: Établissement) */
     label p {{
         color: white !important;
         font-weight: 700 !important;
         font-size: 1.1rem !important;
     }}
 
-    .stTabs [data-baseweb="tab-list"] {{ gap: 15px; }}
+    /* CORRECTION DES ONGLETS */
+    .stTabs [data-baseweb="tab-list"] {{ 
+        gap: 15px; 
+    }}
     .stTabs [data-baseweb="tab"] {{
-        height: 50px;
+        height: auto !important;  /* On retire la hauteur fixe qui coupait le texte */
+        padding: 12px 20px !important; /* On ajoute de l'air autour du texte */
         background-color: rgba(255,255,255,0.05);
         border-radius: 8px 8px 0px 0px;
-        color: white;
+        color: white !important;
         border: 1px solid rgba(132, 27, 243, 0.2);
+        white-space: nowrap; /* Empêche le texte de se plier bizarrement */
     }}
     .stTabs [aria-selected="true"] {{
         background-color: rgba(132, 27, 243, 0.3) !important;
         border-bottom: 3px solid #841bf3 !important;
     }}
 
+    /* CORRECTION DE L'UPLOADER */
+    .stSelectbox div[data-baseweb="select"], .stFileUploader section {{
+        border: 1px solid #841bf3 !important;
+        background-color: rgba(0,0,0,0.8) !important;
+        border-radius: 12px;
+        padding: 5px;
+    }}
+    /* On s'assure que le bouton natif Upload de Streamlit n'est pas déformé */
+    .stFileUploader button {{
+        border-radius: 8px !important;
+    }}
+
+    /* Zone Audio Input */
     .stAudioInput {{
         margin-top: 20px;
         padding: 15px;
@@ -99,6 +116,7 @@ st.markdown(f"""
         background-color: rgba(0,0,0,0.6);
     }}
 
+    /* Bouton d'envoi principal */
     .stButton>button {{
         border: none !important;
         background-color: #841bf3 !important;
@@ -112,12 +130,6 @@ st.markdown(f"""
     .stButton>button:hover {{
         box-shadow: 0 0 30px rgba(132, 27, 243, 0.7);
     }}
-
-    .stSelectbox div[data-baseweb="select"], .stFileUploader section {{
-        border: 1px solid #841bf3 !important;
-        background-color: rgba(0,0,0,0.8) !important;
-        border-radius: 12px;
-    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -127,6 +139,8 @@ try:
     st.image(chemin_banniere, use_container_width=True)
 except Exception:
     pass
+
+st.write("") 
 
 # --- LOGIQUE ---
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
@@ -165,39 +179,4 @@ def push_to_notion(data, database_id, name):
             "Statut": {"status": {"name": "A vérifier"}},
             "ITEM": {"select": {"name": str(data.get("item", "Process"))}},
             "Pôle concerné": {"select": {"name": str(data.get("pole_concerne", "Exploitation"))}},
-            "Prise en charge": {"select": {"name": str(data.get("prise_en_charge", "Staff"))}},
-            "Criticité": {"select": {"name": str(data.get("criticite", "Moyenne"))}},
-            "Red flag": {"select": {"name": "Oui" if data.get("red_flag") else "Non"}},
-            "Date de créa Notion": {"date": {"start": date_jour}},
-            "MAJ tâche NOTION": {"date": {"start": date_jour}},
-            "Confiance qualification": {"rich_text": [{"text": {"content": "Camille"}}]}
-        }
-    }
-    return requests.post(url, json=payload, headers=headers)
-
-if final_audio:
-    if st.button("Lancer l'analyse vers Notion"):
-        with st.spinner("Analyse et envoi..."):
-            try:
-                with open("temp.m4a", "wb") as f:
-                    f.write(final_audio.getbuffer())
-                
-                f_up = client.files.upload(file="temp.m4a")
-                prompt = "Expert Arkose. Analyse l'audio. JSON obligatoire: nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag(bool)."
-                
-                resp = client.models.generate_content(
-                    model='gemini-1.5-flash-latest',
-                    contents=[f_up, prompt],
-                    config=types.GenerateContentConfig(response_mime_type="application/json")
-                )
-                
-                items = json.loads(resp.text)
-                
-                if not isinstance(items, list):
-                    items = [items]
-                
-                for i in items:
-                    push_to_notion(i, db_id, salle_nom)
-                st.success(f"Audit synchronisé ! {len(items)} tâche(s) ajoutée(s).")
-            except Exception as e:
-                st.error(f"Erreur technique : {e}")
+            "Prise en charge": {"select": {"name
