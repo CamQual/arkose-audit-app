@@ -72,9 +72,7 @@ css_base = """
         font-size: 1.1rem !important;
     }
 
-    .stTabs [data-baseweb="tab-list"] { 
-        gap: 15px; 
-    }
+    .stTabs [data-baseweb="tab-list"] { gap: 15px; }
     .stTabs [data-baseweb="tab"] {
         height: auto !important;  
         padding: 12px 20px !important; 
@@ -124,7 +122,6 @@ css_base = """
 </style>
 """
 
-# Injection du CSS
 st.markdown(bg_css_rule + css_base, unsafe_allow_html=True)
 
 # --- BANNIÈRE ---
@@ -170,7 +167,7 @@ def push_to_notion(data, database_id, name):
             "Établissement": {"select": {"name": name.upper()}},
             "Liste source": {"select": {"name": str(data.get("liste_source", "Accueil"))}},
             "Projet source": {"rich_text": [{"text": {"content": f"Audit {name.upper()}"}}]},
-            "Statut": {"status": {"name": "A vérifier"}},
+            "Statut": {"status": {"name": "A vérifier"}},  # Attention à l'orthographe exacte dans Notion ici !
             "ITEM": {"select": {"name": str(data.get("item", "Process"))}},
             "Pôle concerné": {"select": {"name": str(data.get("pole_concerne", "Exploitation"))}},
             "Prise en charge": {"select": {"name": str(data.get("prise_en_charge", "Staff"))}},
@@ -181,11 +178,16 @@ def push_to_notion(data, database_id, name):
             "Confiance qualification": {"rich_text": [{"text": {"content": "Camille"}}]}
         }
     }
-    return requests.post(url, json=payload, headers=headers)
+    
+    response = requests.post(url, json=payload, headers=headers)
+    # NOUVEAU : Si Notion refuse la tâche, on lève une erreur pour l'afficher sur l'écran
+    if response.status_code != 200:
+        raise Exception(f"Refus de Notion : {response.text}")
+    return response
 
 if final_audio:
     if st.button("Lancer l'analyse vers Notion"):
-        with st.spinner("Analyse et envoi..."):
+        with st.spinner("Analyse et envoi vers Notion..."):
             try:
                 with open("temp.m4a", "wb") as f:
                     f.write(final_audio.getbuffer())
@@ -204,8 +206,19 @@ if final_audio:
                 if not isinstance(items, list):
                     items = [items]
                 
+                erreurs = 0
                 for i in items:
-                    push_to_notion(i, db_id, salle_nom)
-                st.success(f"Audit synchronisé ! {len(items)} tâche(s) ajoutée(s).")
+                    try:
+                        push_to_notion(i, db_id, salle_nom)
+                    except Exception as e:
+                        # On affiche l'erreur exacte envoyée par Notion
+                        st.error(f"❌ Erreur sur une tâche : {e}")
+                        erreurs += 1
+                
+                if erreurs == 0:
+                    st.success(f"🔥 Audit synchronisé ! {len(items)} tâche(s) ajoutée(s) avec succès.")
+                else:
+                    st.warning(f"⚠️ {len(items) - erreurs} tâches ajoutées, mais {erreurs} ont été refusées par Notion. Lis les messages rouges ci-dessus.")
+                    
             except Exception as e:
-                st.error(f"Erreur technique : {e}")
+                st.error(f"Erreur technique de l'IA : {e}")
