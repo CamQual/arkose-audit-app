@@ -36,12 +36,14 @@ SALLES_ARKOSE = {
 
 st.set_page_config(page_title="Audit Arkose", page_icon="🧗", layout="centered")
 
-# --- GESTION DE L'IMAGE DE FOND ---
+# --- GESTION DE L'IMAGE DE FOND (MÉTHODE ROBUSTE) ---
 bg_css = ""
-nom_fichier_fond = "AdobeStock_271556185.jpg"
+# On récupère le dossier exact où se trouve ce script app.py
+dossier_script = os.path.dirname(os.path.abspath(__file__))
+chemin_image = os.path.join(dossier_script, "AdobeStock_271556185.jpg")
 
-if os.path.exists(nom_fichier_fond):
-    with open(nom_fichier_fond, "rb") as image_file:
+if os.path.exists(chemin_image):
+    with open(chemin_image, "rb") as image_file:
         encoded_string = base64.b64encode(image_file.read()).decode()
     bg_css = f"""
     .stApp {{
@@ -52,7 +54,12 @@ if os.path.exists(nom_fichier_fond):
     }}
     """
 else:
+    # SI L'IMAGE N'EST PAS TROUVÉE, ON AFFICHE LE DÉBOGAGE
     bg_css = ".stApp { background-color: #121212; }"
+    fichiers_visibles = os.listdir(dossier_script)
+    st.error("⚠️ L'image de fond est introuvable pour le serveur.")
+    st.warning(f"Le script cherche exactement le nom : **AdobeStock_271556185.jpg**")
+    st.info(f"Voici les fichiers que le serveur voit actuellement sur GitHub : {fichiers_visibles}")
 
 # --- DESIGN ET POLICES ---
 st.markdown(f"""
@@ -61,7 +68,6 @@ st.markdown(f"""
 
     {bg_css}
 
-    /* Reste du texte : Helvetica Neue */
     p, label, span, div, .stMarkdown, button {{
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
     }}
@@ -117,7 +123,8 @@ st.markdown(f"""
 
 # --- BANNIÈRE ---
 try:
-    st.image("banniere audit interne.jpg", use_container_width=True)
+    chemin_banniere = os.path.join(dossier_script, "banniere audit interne.jpg")
+    st.image(chemin_banniere, use_container_width=True)
 except Exception:
     pass
 
