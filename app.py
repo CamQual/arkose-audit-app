@@ -334,3 +334,11 @@ if final_audio:
                     except Exception as e:
                         st.error(f"❌ Erreur sur une tâche : {e}")
                         erreurs += 1
+                
+                if erreurs == 0:
+                    st.success(f"🔥 Audit synchronisé ! {len(items)} tâche(s) ajoutée(s) avec succès.")
+                else:
+                    st.warning(f"⚠️ {len(items) - erreurs} tâches ajoutées, mais {erreurs} ont été refusées par Notion.")
+                    
+            except Exception as e:
+                st.error(f"Erreur technique de l'IA : {e}")
