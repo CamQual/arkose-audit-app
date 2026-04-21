@@ -208,7 +208,7 @@ if final_audio:
                 prompt = "Expert Arkose. Analyse l'audio. JSON obligatoire: nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag(bool)."
                 
                 resp = client.models.generate_content(
-                    model='gemini-1.5-flash',
+                    model='gemini-2.5-flash',
                     contents=[f_up, prompt],
                     config=types.GenerateContentConfig(response_mime_type="application/json")
                 )
