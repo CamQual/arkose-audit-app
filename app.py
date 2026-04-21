@@ -82,13 +82,13 @@ st.markdown(f"""
         gap: 15px; 
     }}
     .stTabs [data-baseweb="tab"] {{
-        height: auto !important;  /* On retire la hauteur fixe qui coupait le texte */
-        padding: 12px 20px !important; /* On ajoute de l'air autour du texte */
+        height: auto !important;  
+        padding: 12px 20px !important; 
         background-color: rgba(255,255,255,0.05);
         border-radius: 8px 8px 0px 0px;
         color: white !important;
         border: 1px solid rgba(132, 27, 243, 0.2);
-        white-space: nowrap; /* Empêche le texte de se plier bizarrement */
+        white-space: nowrap; 
     }}
     .stTabs [aria-selected="true"] {{
         background-color: rgba(132, 27, 243, 0.3) !important;
@@ -102,7 +102,7 @@ st.markdown(f"""
         border-radius: 12px;
         padding: 5px;
     }}
-    /* On s'assure que le bouton natif Upload de Streamlit n'est pas déformé */
+    
     .stFileUploader button {{
         border-radius: 8px !important;
     }}
@@ -179,4 +179,40 @@ def push_to_notion(data, database_id, name):
             "Statut": {"status": {"name": "A vérifier"}},
             "ITEM": {"select": {"name": str(data.get("item", "Process"))}},
             "Pôle concerné": {"select": {"name": str(data.get("pole_concerne", "Exploitation"))}},
-            "Prise en charge": {"select": {"name
+            "Prise en charge": {"select": {"name": str(data.get("prise_en_charge", "Staff"))}},
+            "Criticité": {"select": {"name": str(data.get("criticite", "Moyenne"))}},
+            "Red flag": {"select": {"name": "Oui" if data.get("red_flag") else "Non"}},
+            "Date de créa Notion": {"date": {"start": date_jour}},
+            "MAJ tâche NOTION": {"date": {"start": date_jour}},
+            "Confiance qualification": {"rich_text": [{"text": {"content": "Camille"}}]}
+        }
+    }
+    return requests.post(url, json=payload, headers=headers)
+
+if final_audio:
+    if st.button("Lancer l'analyse vers Notion"):
+        with st.spinner("Analyse et envoi..."):
+            try:
+                with open("temp.m4a", "wb") as f:
+                    f.write(final_audio.getbuffer())
+                
+                f_up = client.files.upload(file="temp.m4a")
+                prompt = "Expert Arkose. Analyse l'audio. JSON obligatoire: nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag(bool)."
+                
+                # Mise à jour du nom du modèle vers la version stable
+                resp = client.models.generate_content(
+                    model='gemini-1.5-flash',
+                    contents=[f_up, prompt],
+                    config=types.GenerateContentConfig(response_mime_type="application/json")
+                )
+                
+                items = json.loads(resp.text)
+                
+                if not isinstance(items, list):
+                    items = [items]
+                
+                for i in items:
+                    push_to_notion(i, db_id, salle_nom)
+                st.success(f"Audit synchronisé ! {len(items)} tâche(s) ajoutée(s).")
+            except Exception as e:
+                st.error(f"Erreur technique : {e}")
