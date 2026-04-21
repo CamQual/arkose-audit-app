@@ -36,33 +36,39 @@ SALLES_ARKOSE = {
 
 st.set_page_config(page_title="Audit Arkose", page_icon="🧗", layout="centered")
 
-# --- GESTION DE L'IMAGE DE FOND ---
-bg_css_rule = ""
-dossier_script = os.path.dirname(os.path.abspath(__file__))
-chemin_image = os.path.join(dossier_script, "AdobeStock_271556185.jpg")
+# --- RECHERCHE INTELLIGENTE DE L'IMAGE DE FOND ---
+target_bg = "adobestock_271556185"
+fond_trouve = None
 
-if os.path.exists(chemin_image):
-    with open(chemin_image, "rb") as image_file:
+# Cherche le fichier même si les majuscules sont différentes
+for fichier in os.listdir('.'):
+    if fichier.lower().startswith(target_bg):
+        fond_trouve = fichier
+        break
+
+if fond_trouve:
+    with open(fond_trouve, "rb") as image_file:
         encoded_string = base64.b64encode(image_file.read()).decode()
     bg_css_rule = f"""
     <style>
     .stApp {{
         background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), 
-                    url("data:image/jpeg;base64,{encoded_string}");
-        background-size: cover;
-        background-attachment: fixed;
+                    url("data:image/jpeg;base64,{encoded_string}") !important;
+        background-size: cover !important;
+        background-attachment: fixed !important;
     }}
     </style>
     """
 else:
     bg_css_rule = "<style>.stApp { background-color: #121212; }</style>"
+    st.error(f"⚠️ Image de fond introuvable. Voici ce que voit l'application : {os.listdir('.')}")
 
 # --- DESIGN ET POLICES ---
 css_base = """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap');
 
-    html, body, [class*="st-"] {
+    p, label, span, div, .stMarkdown, button {
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
     }
 
@@ -87,13 +93,17 @@ css_base = """
         border-bottom: 3px solid #841bf3 !important;
     }
 
+    /* CORRECTION DU BUG DE L'UPLOADER (On lui redonne de l'espace) */
     .stSelectbox div[data-baseweb="select"], .stFileUploader section {
         border: 1px solid #841bf3 !important;
         background-color: rgba(0,0,0,0.8) !important;
         border-radius: 12px;
-        padding: 5px;
     }
     
+    .stFileUploader section {
+        padding: 20px !important; 
+    }
+
     .stFileUploader button {
         border-radius: 8px !important;
     }
@@ -124,12 +134,15 @@ css_base = """
 
 st.markdown(bg_css_rule + css_base, unsafe_allow_html=True)
 
-# --- BANNIÈRE ---
-try:
-    chemin_banniere = os.path.join(dossier_script, "banniere audit interne.jpg")
-    st.image(chemin_banniere, use_container_width=True)
-except Exception:
-    pass
+# --- RECHERCHE INTELLIGENTE BANNIÈRE ---
+banniere_trouvee = None
+for fichier in os.listdir('.'):
+    if fichier.lower().startswith("banniere"):
+        banniere_trouvee = fichier
+        break
+        
+if banniere_trouvee:
+    st.image(banniere_trouvee, use_container_width=True)
 
 st.write("") 
 
@@ -194,9 +207,8 @@ if final_audio:
                 f_up = client.files.upload(file="temp.m4a")
                 prompt = "Expert Arkose. Analyse l'audio. JSON obligatoire: nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag(bool)."
                 
-                # --- NOM DE MODÈLE ULTRA-SPÉCIFIQUE ---
                 resp = client.models.generate_content(
-                    model='gemini-1.5-flash-002',
+                    model='gemini-1.5-flash',
                     contents=[f_up, prompt],
                     config=types.GenerateContentConfig(response_mime_type="application/json")
                 )
@@ -217,7 +229,7 @@ if final_audio:
                 if erreurs == 0:
                     st.success(f"🔥 Audit synchronisé ! {len(items)} tâche(s) ajoutée(s) avec succès.")
                 else:
-                    st.warning(f"⚠️ {len(items) - erreurs} tâches ajoutées, mais {erreurs} ont été refusées par Notion. Lis les messages rouges ci-dessus.")
+                    st.warning(f"⚠️ {len(items) - erreurs} tâches ajoutées, mais {erreurs} ont été refusées par Notion.")
                     
             except Exception as e:
                 st.error(f"Erreur technique de l'IA : {e}")
