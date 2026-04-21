@@ -6,6 +6,70 @@ import json
 from datetime import datetime
 import base64
 import os
+import sqlite3
+
+# --- INITIALISATION DE LA BASE DE DONNÉES UTILISATEURS ---
+conn = sqlite3.connect('utilisateurs.db', check_same_thread=False)
+c = conn.cursor()
+c.execute('CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, role TEXT)')
+
+c.execute('SELECT count(*) FROM users')
+if c.fetchone()[0] == 0:
+    c.execute("INSERT INTO users VALUES ('admin@arkose.com', 'admin')")
+    conn.commit()
+
+# --- INITIALISATION DE LA SESSION ---
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
+if 'user_email' not in st.session_state:
+    st.session_state['user_email'] = ""
+if 'user_role' not in st.session_state:
+    st.session_state['user_role'] = ""
+
+st.set_page_config(page_title="Audit Arkose", page_icon="🧗", layout="centered")
+
+# --- PAGE DE CONNEXION ---
+if not st.session_state['logged_in']:
+    st.markdown("""
+    <style>
+        .login-box {
+            background-color: #121212; padding: 40px; border-radius: 15px; 
+            border: 2px solid #841bf3; text-align: center; margin-top: 50px;
+        }
+        .stButton>button { width: 100%; background-color: #841bf3 !important; color: white; border-radius: 8px;}
+    </style>
+    """, unsafe_allow_html=True)
+    
+    st.markdown('<div class="login-box">', unsafe_allow_html=True)
+    st.title("🧗 Arkose Audit")
+    st.write("Veuillez vous identifier pour accéder à l'application.")
+    
+    email_input = st.text_input("Adresse email (Google Connect simulé) :", placeholder="ex: jean.dupont@arkose.com")
+    
+    if st.button("Se connecter"):
+        if email_input:
+            c.execute("SELECT role FROM users WHERE email=?", (email_input.lower().strip(),))
+            result = c.fetchone()
+            if result:
+                st.session_state['logged_in'] = True
+                st.session_state['user_email'] = email_input.lower().strip()
+                st.session_state['user_role'] = result[0]
+                st.rerun()
+            else:
+                st.error("⛔ Accès refusé. Ce compte n'est pas autorisé.")
+        else:
+            st.warning("Veuillez entrer un email.")
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.stop()
+
+# --- DÉCONNEXION ---
+col_vide, col_logout = st.columns([4, 1])
+with col_logout:
+    if st.button("Déconnexion"):
+        st.session_state['logged_in'] = False
+        st.session_state['user_email'] = ""
+        st.session_state['user_role'] = ""
+        st.rerun()
 
 # --- CONFIGURATION DES SALLES ---
 SALLES_ARKOSE = {
@@ -34,13 +98,12 @@ SALLES_ARKOSE = {
     "Saint Denis - CAO": "342457aab01481dc8ebbf88df7c120a8"
 }
 
-st.set_page_config(page_title="Audit Arkose", page_icon="🧗", layout="centered")
-
-# --- RECHERCHE INTELLIGENTE DE L'IMAGE DE FOND ---
+# --- GESTION DE L'IMAGE DE FOND ---
+bg_css_rule = ""
+dossier_script = os.path.dirname(os.path.abspath(__file__))
 target_bg = "adobestock_271556185"
 fond_trouve = None
 
-# Cherche le fichier même si les majuscules sont différentes
 for fichier in os.listdir('.'):
     if fichier.lower().startswith(target_bg):
         fond_trouve = fichier
@@ -61,175 +124,49 @@ if fond_trouve:
     """
 else:
     bg_css_rule = "<style>.stApp { background-color: #121212; }</style>"
-    st.error(f"⚠️ Image de fond introuvable. Voici ce que voit l'application : {os.listdir('.')}")
 
 # --- DESIGN ET POLICES ---
 css_base = """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap');
 
-    p, label, span, div, .stMarkdown, button {
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important;
-    }
-
-    label p {
-        color: white !important;
-        font-weight: 700 !important;
-        font-size: 1.1rem !important;
-    }
+    p, label, span, div, .stMarkdown, button { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important; }
+    label p { color: white !important; font-weight: 700 !important; font-size: 1.1rem !important; }
 
     .stTabs [data-baseweb="tab-list"] { gap: 15px; }
     .stTabs [data-baseweb="tab"] {
-        height: auto !important;  
-        padding: 12px 20px !important; 
-        background-color: rgba(255,255,255,0.05);
-        border-radius: 8px 8px 0px 0px;
-        color: white !important;
-        border: 1px solid rgba(132, 27, 243, 0.2);
-        white-space: nowrap; 
+        height: auto !important; padding: 12px 20px !important; 
+        background-color: rgba(255,255,255,0.05); border-radius: 8px 8px 0px 0px;
+        color: white !important; border: 1px solid rgba(132, 27, 243, 0.2); white-space: nowrap; 
     }
-    .stTabs [aria-selected="true"] {
-        background-color: rgba(132, 27, 243, 0.3) !important;
-        border-bottom: 3px solid #841bf3 !important;
-    }
+    .stTabs [aria-selected="true"] { background-color: rgba(132, 27, 243, 0.3) !important; border-bottom: 3px solid #841bf3 !important; }
 
-    /* CORRECTION DU BUG DE L'UPLOADER (On lui redonne de l'espace) */
     .stSelectbox div[data-baseweb="select"], .stFileUploader section {
-        border: 1px solid #841bf3 !important;
-        background-color: rgba(0,0,0,0.8) !important;
-        border-radius: 12px;
+        border: 1px solid #841bf3 !important; background-color: rgba(0,0,0,0.8) !important; border-radius: 12px;
     }
-    
-    .stFileUploader section {
-        padding: 20px !important; 
-    }
-
-    .stFileUploader button {
-        border-radius: 8px !important;
-    }
+    .stFileUploader section { padding: 20px !important; }
+    .stFileUploader button { border-radius: 8px !important; }
 
     .stAudioInput {
-        margin-top: 20px;
-        padding: 15px;
-        border: 1px solid #841bf3 !important;
-        border-radius: 12px;
-        background-color: rgba(0,0,0,0.6);
+        margin-top: 20px; padding: 15px; border: 1px solid #841bf3 !important;
+        border-radius: 12px; background-color: rgba(0,0,0,0.6);
     }
 
     .stButton>button {
-        border: none !important;
-        background-color: #841bf3 !important;
-        color: white !important;
-        font-weight: 700 !important;
-        border-radius: 12px;
-        padding: 1.2rem;
-        width: 100%;
-        margin-top: 3rem;
+        border: none !important; background-color: #841bf3 !important; color: white !important;
+        font-weight: 700 !important; border-radius: 12px; padding: 1.2rem; width: 100%; margin-top: 1rem;
     }
-    .stButton>button:hover {
-        box-shadow: 0 0 30px rgba(132, 27, 243, 0.7);
-    }
+    .stButton>button:hover { box-shadow: 0 0 30px rgba(132, 27, 243, 0.7); }
 </style>
 """
 
 st.markdown(bg_css_rule + css_base, unsafe_allow_html=True)
 
-# --- RECHERCHE INTELLIGENTE BANNIÈRE ---
+# --- BANNIÈRE ---
 banniere_trouvee = None
 for fichier in os.listdir('.'):
     if fichier.lower().startswith("banniere"):
         banniere_trouvee = fichier
         break
-        
 if banniere_trouvee:
-    st.image(banniere_trouvee, use_container_width=True)
-
-st.write("") 
-
-# --- LOGIQUE ---
-client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-token = st.secrets["NOTION_TOKEN"]
-
-salle_nom = st.selectbox("Établissement :", list(SALLES_ARKOSE.keys()))
-db_id = SALLES_ARKOSE[salle_nom]
-
-st.write("") 
-
-# --- TABS ---
-tab_micro, tab_file = st.tabs(["🎤 Enregistrer", "📂 Uploader"])
-
-with tab_micro:
-    st.write("Clique sur le micro pour parler :")
-    audio_record = st.audio_input("Capture vocale en direct")
-
-with tab_file:
-    st.write("Sélectionne ton fichier :")
-    audio_file = st.file_uploader("Fichier audio (mp3, m4a, wav)", type=['mp3', 'm4a', 'wav'])
-
-final_audio = audio_file if audio_file else audio_record
-
-def push_to_notion(data, database_id, name):
-    url = "https://api.notion.com/v1/pages"
-    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Notion-Version": "2022-06-28"}
-    date_jour = datetime.now().strftime("%Y-%m-%d")
-    
-    payload = {
-        "parent": {"database_id": database_id},
-        "properties": {
-            "Nom de la tâche": {"title": [{"text": {"content": str(data.get("nom_de_la_tache", "Sans titre"))}}]},
-            "Établissement": {"select": {"name": name.upper()}},
-            "Liste source": {"select": {"name": str(data.get("liste_source", "Accueil"))}},
-            "Projet source": {"rich_text": [{"text": {"content": f"Audit {name.upper()}"}}]},
-            "Statut": {"status": {"name": "A vérifier"}},
-            "ITEM": {"select": {"name": str(data.get("item", "Process"))}},
-            "Pôle concerné": {"select": {"name": str(data.get("pole_concerne", "Exploitation"))}},
-            "Prise en charge": {"select": {"name": str(data.get("prise_en_charge", "Staff"))}},
-            "Criticité": {"select": {"name": str(data.get("criticite", "Moyenne"))}},
-            "Red flag": {"select": {"name": "Oui" if data.get("red_flag") else "Non"}},
-            "Date de créa Notion": {"date": {"start": date_jour}},
-            "MAJ tâche NOTION": {"date": {"start": date_jour}},
-            "Confiance qualification": {"rich_text": [{"text": {"content": "Camille"}}]}
-        }
-    }
-    
-    response = requests.post(url, json=payload, headers=headers)
-    if response.status_code != 200:
-        raise Exception(f"Refus de Notion : {response.text}")
-    return response
-
-if final_audio:
-    if st.button("Lancer l'analyse vers Notion"):
-        with st.spinner("Analyse et envoi vers Notion..."):
-            try:
-                with open("temp.m4a", "wb") as f:
-                    f.write(final_audio.getbuffer())
-                
-                f_up = client.files.upload(file="temp.m4a")
-                prompt = "Expert Arkose. Analyse l'audio. JSON obligatoire: nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag(bool)."
-                
-                resp = client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=[f_up, prompt],
-                    config=types.GenerateContentConfig(response_mime_type="application/json")
-                )
-                
-                items = json.loads(resp.text)
-                
-                if not isinstance(items, list):
-                    items = [items]
-                
-                erreurs = 0
-                for i in items:
-                    try:
-                        push_to_notion(i, db_id, salle_nom)
-                    except Exception as e:
-                        st.error(f"❌ Erreur sur une tâche : {e}")
-                        erreurs += 1
-                
-                if erreurs == 0:
-                    st.success(f"🔥 Audit synchronisé ! {len(items)} tâche(s) ajoutée(s) avec succès.")
-                else:
-                    st.warning(f"⚠️ {len(items) - erreurs} tâches ajoutées, mais {erreurs} ont été refusées par Notion.")
-                    
-            except Exception as e:
-                st.error(f"Erreur technique de l'IA : {e}")
+    st.image(banniere_trouvee, use_container_width
