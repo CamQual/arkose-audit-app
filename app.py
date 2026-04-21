@@ -194,8 +194,9 @@ if final_audio:
                 f_up = client.files.upload(file="temp.m4a")
                 prompt = "Expert Arkose. Analyse l'audio. JSON obligatoire: nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag(bool)."
                 
+                # --- RETOUR AU MODÈLE LE PLUS STABLE POUR LES COMPTES GRATUITS ---
                 resp = client.models.generate_content(
-                    model='gemini-2.0-flash',
+                    model='gemini-1.5-flash',
                     contents=[f_up, prompt],
                     config=types.GenerateContentConfig(response_mime_type="application/json")
                 )
