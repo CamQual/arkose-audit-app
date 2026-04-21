@@ -314,7 +314,7 @@ if final_audio:
                 f_up = client.files.upload(file="temp.m4a")
                 
                 resp = client.models.generate_content(
-                    model='gemini-2.5-flash-8b',
+                    model='gemini-2.5-flash',
                     contents=[f_up, PROMPT_ARKOSE],
                     config=types.GenerateContentConfig(response_mime_type="application/json")
                 )
