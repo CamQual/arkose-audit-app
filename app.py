@@ -97,3 +97,126 @@ css_base = """
     .stFileUploader button {
         border-radius: 8px !important;
     }
+
+    .stAudioInput {
+        margin-top: 20px;
+        padding: 15px;
+        border: 1px solid #841bf3 !important;
+        border-radius: 12px;
+        background-color: rgba(0,0,0,0.6);
+    }
+
+    .stButton>button {
+        border: none !important;
+        background-color: #841bf3 !important;
+        color: white !important;
+        font-weight: 700 !important;
+        border-radius: 12px;
+        padding: 1.2rem;
+        width: 100%;
+        margin-top: 3rem;
+    }
+    .stButton>button:hover {
+        box-shadow: 0 0 30px rgba(132, 27, 243, 0.7);
+    }
+</style>
+"""
+
+st.markdown(bg_css_rule + css_base, unsafe_allow_html=True)
+
+# --- BANNIÈRE ---
+try:
+    chemin_banniere = os.path.join(dossier_script, "banniere audit interne.jpg")
+    st.image(chemin_banniere, use_container_width=True)
+except Exception:
+    pass
+
+st.write("") 
+
+# --- LOGIQUE ---
+client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+token = st.secrets["NOTION_TOKEN"]
+
+salle_nom = st.selectbox("Établissement :", list(SALLES_ARKOSE.keys()))
+db_id = SALLES_ARKOSE[salle_nom]
+
+st.write("") 
+
+# --- TABS ---
+tab_micro, tab_file = st.tabs(["🎤 Enregistrer", "📂 Uploader"])
+
+with tab_micro:
+    st.write("Clique sur le micro pour parler :")
+    audio_record = st.audio_input("Capture vocale en direct")
+
+with tab_file:
+    st.write("Sélectionne ton fichier :")
+    audio_file = st.file_uploader("Fichier audio (mp3, m4a, wav)", type=['mp3', 'm4a', 'wav'])
+
+final_audio = audio_file if audio_file else audio_record
+
+def push_to_notion(data, database_id, name):
+    url = "https://api.notion.com/v1/pages"
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Notion-Version": "2022-06-28"}
+    date_jour = datetime.now().strftime("%Y-%m-%d")
+    
+    payload = {
+        "parent": {"database_id": database_id},
+        "properties": {
+            "Nom de la tâche": {"title": [{"text": {"content": str(data.get("nom_de_la_tache", "Sans titre"))}}]},
+            "Établissement": {"select": {"name": name.upper()}},
+            "Liste source": {"select": {"name": str(data.get("liste_source", "Accueil"))}},
+            "Projet source": {"rich_text": [{"text": {"content": f"Audit {name.upper()}"}}]},
+            "Statut": {"status": {"name": "A vérifier"}},
+            "ITEM": {"select": {"name": str(data.get("item", "Process"))}},
+            "Pôle concerné": {"select": {"name": str(data.get("pole_concerne", "Exploitation"))}},
+            "Prise en charge": {"select": {"name": str(data.get("prise_en_charge", "Staff"))}},
+            "Criticité": {"select": {"name": str(data.get("criticite", "Moyenne"))}},
+            "Red flag": {"select": {"name": "Oui" if data.get("red_flag") else "Non"}},
+            "Date de créa Notion": {"date": {"start": date_jour}},
+            "MAJ tâche NOTION": {"date": {"start": date_jour}},
+            "Confiance qualification": {"rich_text": [{"text": {"content": "Camille"}}]}
+        }
+    }
+    
+    response = requests.post(url, json=payload, headers=headers)
+    if response.status_code != 200:
+        raise Exception(f"Refus de Notion : {response.text}")
+    return response
+
+if final_audio:
+    if st.button("Lancer l'analyse vers Notion"):
+        with st.spinner("Analyse et envoi vers Notion..."):
+            try:
+                with open("temp.m4a", "wb") as f:
+                    f.write(final_audio.getbuffer())
+                
+                f_up = client.files.upload(file="temp.m4a")
+                prompt = "Expert Arkose. Analyse l'audio. JSON obligatoire: nom_de_la_tache, liste_source, item, pole_concerne, prise_en_charge, criticite, red_flag(bool)."
+                
+                resp = client.models.generate_content(
+                    model='gemini-2.0-flash',
+                    contents=[f_up, prompt],
+                    config=types.GenerateContentConfig(response_mime_type="application/json")
+                )
+                
+                items = json.loads(resp.text)
+                
+                if not isinstance(items, list):
+                    items = [items]
+                
+                erreurs = 0
+                for i in items:
+                    try:
+                        push_to_notion(i, db_id, salle_nom)
+                    except Exception as e:
+                        st.error(f"❌ Erreur sur une tâche : {e}")
+                        erreurs += 1
+                
+                if erreurs == 0:
+                    st.success(f"🔥 Audit synchronisé ! {len(items)} tâche(s) ajoutée(s) avec succès.")
+                else:
+                    st.warning(f"⚠️ {len(items) - erreurs} tâches ajoutées, mais {erreurs} ont été refusées par Notion. Lis les messages rouges ci-dessus.")
+                    
+            except Exception as e:
+                st.error(f"Erreur technique de l'IA : {e}")
