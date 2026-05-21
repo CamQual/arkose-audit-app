@@ -101,7 +101,7 @@ SALLES_ARKOSE = {
     "Strasbourg Saint Denis": "342457aab01481f2aaebd2d9955e73ec",
     "Nanterre": "342457aab01481bd9916f46b3f9ad295",
     "Montmartre": "342457aab01481c2b7e8cdb57558af81",
-    "Chevaleret": "342457aab01480db94d7d49ebb5472a3",
+    "Chevaleret": "342457aab01481fe9d70d2cd7ee136c3",
     "Saint Denis - CAO": "342457aab01481dc8ebbf88df7c120a8"
 }
 
