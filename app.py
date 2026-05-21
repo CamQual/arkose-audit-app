@@ -13,10 +13,12 @@ conn = sqlite3.connect('utilisateurs.db', check_same_thread=False)
 c = conn.cursor()
 c.execute('CREATE TABLE IF NOT EXISTS users (email TEXT PRIMARY KEY, role TEXT)')
 
-c.execute('SELECT count(*) FROM users')
-if c.fetchone()[0] == 0:
-    c.execute("INSERT INTO users VALUES ('admin@arkose.com', 'admin')")
-    conn.commit()
+# On s'assure que Camille et l'admin par défaut existent avec le bon rôle
+admins = [('admin@arkose.com', 'admin'), ('camille.g@arkose.com', 'admin')]
+for email, role in admins:
+    c.execute("INSERT OR IGNORE INTO users VALUES (?, ?)", (email, role))
+    c.execute("UPDATE users SET role=? WHERE email=?", (role, email))
+conn.commit()
 
 # --- INITIALISATION DE LA SESSION ---
 if 'logged_in' not in st.session_state:
@@ -44,19 +46,24 @@ if not st.session_state['logged_in']:
     st.title("🧗 Arkose Audit")
     st.write("Veuillez vous identifier pour accéder à l'application.")
     
-    email_input = st.text_input("Adresse email (Google Connect simulé) :", placeholder="ex: camille.g@arkose.com")
+    email_input = st.text_input("Adresse email :", placeholder="ex: camille.g@arkose.com")
     
     if st.button("Se connecter"):
         if email_input:
-            c.execute("SELECT role FROM users WHERE email=?", (email_input.lower().strip(),))
+            email_clean = email_input.lower().strip()
+            c.execute("SELECT role FROM users WHERE email=?", (email_clean,))
             result = c.fetchone()
             if result:
                 st.session_state['logged_in'] = True
-                st.session_state['user_email'] = email_input.lower().strip()
+                st.session_state['user_email'] = email_clean
                 st.session_state['user_role'] = result[0]
                 st.rerun()
             else:
-                st.error("⛔ Accès refusé. Ce compte n'est pas autorisé.")
+                st.error(f"⛔ Accès refusé pour '{email_clean}'. Ce compte n'est pas autorisé.")
+                # Liste des emails autorisés pour debug
+                c.execute("SELECT email FROM users")
+                all_users = [row[0] for row in c.fetchall()]
+                st.write(f"Emails en base : {all_users}")
         else:
             st.warning("Veuillez entrer un email.")
     st.markdown('</div>', unsafe_allow_html=True)
@@ -125,14 +132,11 @@ if fond_trouve:
 else:
     bg_css_rule = "<style>.stApp { background-color: #121212; }</style>"
 
-# --- DESIGN ET POLICES ---
 css_base = """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap');
-
     p, label, span, div, .stMarkdown, button { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important; }
     label p { color: white !important; font-weight: 700 !important; font-size: 1.1rem !important; }
-
     .stTabs [data-baseweb="tab-list"] { gap: 15px; }
     .stTabs [data-baseweb="tab"] {
         height: auto !important; padding: 12px 20px !important; 
@@ -140,18 +144,15 @@ css_base = """
         color: white !important; border: 1px solid rgba(132, 27, 243, 0.2); white-space: nowrap; 
     }
     .stTabs [aria-selected="true"] { background-color: rgba(132, 27, 243, 0.3) !important; border-bottom: 3px solid #841bf3 !important; }
-
     .stSelectbox div[data-baseweb="select"], .stFileUploader section {
         border: 1px solid #841bf3 !important; background-color: rgba(0,0,0,0.8) !important; border-radius: 12px;
     }
     .stFileUploader section { padding: 20px !important; }
     .stFileUploader button { border-radius: 8px !important; }
-
     .stAudioInput {
         margin-top: 20px; padding: 15px; border: 1px solid #841bf3 !important;
         border-radius: 12px; background-color: rgba(0,0,0,0.6);
     }
-
     .stButton>button {
         border: none !important; background-color: #841bf3 !important; color: white !important;
         font-weight: 700 !important; border-radius: 12px; padding: 1.2rem; width: 100%; margin-top: 1rem;
@@ -159,7 +160,6 @@ css_base = """
     .stButton>button:hover { box-shadow: 0 0 30px rgba(132, 27, 243, 0.7); }
 </style>
 """
-
 st.markdown(bg_css_rule + css_base, unsafe_allow_html=True)
 
 # --- BANNIÈRE ---
@@ -233,18 +233,32 @@ if st.session_state['user_role'] == 'admin':
                     conn.commit()
                     st.rerun()
 
-# --- LOGIQUE NOTION & IA ---
+# --- VIGILE ANTI-INVENTION (BLOQUE L'IA SI ELLE INVENTE DES MOTS) ---
+def get_valid_option(raw_value, allowed_list, default_value):
+    raw_lower = str(raw_value).strip().lower()
+    for option in allowed_list:
+        if raw_lower == option.lower():
+            return option
+    return default_value # Si l'IA a inventé un mot, on force la valeur par défaut !
+
+LISTE_SOURCE_OBLIGATOIRE = ["EXTERIEUR/TERRASSE", "ACCUEIL", "BAR", "CANTINE", "CUISINE", "TOILETTES SALLE", "VESTIAIRES", "VESTIAIRE SEC", "SAUNA", "FITNESS", "SALLE GLOBALE", "SALLE PRIVATISABLE", "ZONE DE GRIMPE", "SHOP", "BIEN ETRE"]
+ITEM_OBLIGATOIRE = ["ACCUEIL/DISCOURS/EXPE CLIENT", "IMAGE DE MARQUE", "PROPRETE/HYGIENE/ENTRETIEN", "PROCESS", "VALORISATION DE L'OFFRE"]
+POLE_OBLIGATOIRE = ["EXPLOITATION", "TRAVAUX", "MAINTENANCE", "ESCALADE", "COM&MARKET", "DECO", "SUPPORT IT", "RH", "RSE", "PROPERTY"]
+PRISE_EN_CHARGE_OBLIGATOIRE = ["LE NIGHT", "MAIL EQUIPE SUPPORT", "STAFF", "ACHAT EXPLOIT", "PRESTATAIRE EXTERIEUR", "PLATEFORME SUPPORT"]
+CRITICITE_OBLIGATOIRE = ["FAIBLE", "MOYENNE", "CRITIQUE"]
+
+# --- LOGIQUE NOTION ---
 def push_to_notion(data, database_id, name):
     url = "https://api.notion.com/v1/pages"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Notion-Version": "2022-06-28"}
     date_jour = datetime.now().strftime("%Y-%m-%d")
     
-    # Nettoyage automatique des virgules pour éviter le bug Notion
-    liste_source_clean = str(data.get("liste_source", "Accueil")).replace(",", " -")
-    item_clean = str(data.get("item", "Process")).replace(",", " -")
-    pole_clean = str(data.get("pole_concerne", "Exploitation")).replace(",", " -")
-    prise_clean = str(data.get("prise_en_charge", "Staff")).replace(",", " -")
-    crit_clean = str(data.get("criticite", "Moyenne")).replace(",", " -")
+    # Nettoyage implacable : on passe les réponses de l'IA dans notre vigile
+    liste_source_clean = get_valid_option(data.get("liste_source"), LISTE_SOURCE_OBLIGATOIRE, "ACCUEIL")
+    item_clean = get_valid_option(data.get("item"), ITEM_OBLIGATOIRE, "PROCESS")
+    pole_clean = get_valid_option(data.get("pole_concerne"), POLE_OBLIGATOIRE, "EXPLOITATION")
+    prise_clean = get_valid_option(data.get("prise_en_charge"), PRISE_EN_CHARGE_OBLIGATOIRE, "STAFF")
+    crit_clean = get_valid_option(data.get("criticite"), CRITICITE_OBLIGATOIRE, "MOYENNE")
     auteur_clean = str(data.get("auteur", "Camille"))
     
     payload = {
@@ -260,7 +274,7 @@ def push_to_notion(data, database_id, name):
             "Prise en charge": {"select": {"name": prise_clean}},
             "Criticité": {"select": {"name": crit_clean}},
             "Red flag": {"select": {"name": "Oui" if data.get("red_flag") else "Non"}},
-            "Date de créa Notion": {"date": {"start": date_jour}},
+            "Date créa Notion": {"date": {"start": date_jour}},
             "MAJ tâche NOTION": {"date": {"start": date_jour}},
             "Confiance qualification": {"rich_text": [{"text": {"content": f"à vérifier - {auteur_clean}"}}]}
         }
@@ -273,26 +287,30 @@ def push_to_notion(data, database_id, name):
 
 # --- LE PROMPT EXPERT ---
 PROMPT_ARKOSE = """
-Tu es un assistant expert en audit qualité d'Arkose, extrêmement rigoureux. 
-Ta mission est de transcrire des notes vocales et d'extraire les données. 
-RÈGLE D'OR : Pour les champs à choix multiples, tu dois STRICTEMENT utiliser les termes exacts fournis dans les listes ci-dessous. N'INVENTE JAMAIS de nouvelles catégories. Si le terme prononcé n'est pas dans la liste, choisis celui qui s'en rapproche le plus.
+Tu es un assistant expert en audit qualité d'Arkose, extrêmement rigoureux, bienveillant et concis. 
+Ta mission est de transcrire des notes vocales et d'extraire les données pour créer des tâches dans Notion.
+
+RÈGLE D'OR : Pour les champs à choix multiples, tu dois STRICTEMENT utiliser les termes exacts fournis dans les listes ci-dessous. N'INVENTE JAMAIS de nouvelles catégories.
 
 LISTES AUTORISÉES (COPIE EXACTE OBLIGATOIRE) :
-- liste_source : "Extérieur/terrasse", "Accueil", "Bar", "Cantine", "Cuisine", "Toilettes Salle", "Vestiaire", "vestiaire sec", "Sauna", "Fitness (espace étirement)", "Salle globale (espace chill)", "salle privatisable", "zone de grimpe", "shop", "bien être"
-- item : "Accueil/Discours/Expé client", "Image de marque", "Propreté/hygiène/entretien", "Process", "Valorisation de l'offre"
-- pole_concerne : "Exploitation", "Travaux/Maintenance", "Escalade", "Com&Market", "Déco", "Support IT", "RH", "RSE", "Property"
-- prise_en_charge : "Le night", "Mail équipe support", "Staff", "Achat exploit", "Prestataire extérieur", "Plateforme support"
-- criticite : "Faible", "Moyenne", "Critique"
+- liste_source : "EXTERIEUR/TERRASSE", "ACCUEIL", "BAR", "CANTINE", "CUISINE", "TOILETTES SALLE", "VESTIAIRES", "VESTIAIRE SEC", "SAUNA", "FITNESS", "SALLE GLOBALE", "SALLE PRIVATISABLE", "ZONE DE GRIMPE", "SHOP", "BIEN ETRE"
+- item : "ACCUEIL/DISCOURS/EXPE CLIENT", "IMAGE DE MARQUE", "PROPRETE/HYGIENE/ENTRETIEN", "PROCESS", "VALORISATION DE L'OFFRE"
+- pole_concerne : "EXPLOITATION", "TRAVAUX", "MAINTENANCE", "ESCALADE", "COM&MARKET", "DECO", "SUPPORT IT", "RH", "RSE", "PROPERTY"
+- prise_en_charge : "LE NIGHT", "MAIL EQUIPE SUPPORT", "STAFF", "ACHAT EXPLOIT", "PRESTATAIRE EXTERIEUR", "PLATEFORME SUPPORT"
+- criticite : "FAIBLE", "MOYENNE", "CRITIQUE"
 
 RÈGLES D'ANALYSE :
-1. Nettoyage : Supprime les tics de langage ("euh", "bah", répétitions, vulgarité).
-2. Reformulation : Le "nom_de_la_tache" est une phrase courte, objective et pédagogique apportant la solution.
-3. Déduction : Si "Corner" -> "shop". Si "Studio" -> "bien être". Si "Issy" seul -> "Issy Bloc" ou "Issy Voie" selon le contexte.
-4. Par défaut : "pole_concerne" = "Exploitation".
-5. Auteur : Prénom entendu au début, ou "Camille" par défaut.
-6. Criticité : "Faible" (esthétique), "Moyenne" (image/qualité), "Critique" (urgence/hygiène). Ne renvoie que le mot principal.
+1. Nettoyage et Ton : Supprime les tics de langage et reformule les "abus de langage" pour un rendu professionnel.
+2. Reformulation (nom_de_la_tache) : Doit être une phrase COURTE, BIENVEILLANTE, objective et pédagogique apportant la solution.
+3. Règle Spécifique VESTIAIRES : Si l'utilisateur mentionne "VESTIAIRES" avec "FEMME" ou "HOMME" :
+   - 'liste_source' doit rester "VESTIAIRES".
+   - Intègre "FEMME" ou "HOMME" UNIQUEMENT dans le 'nom_de_la_tache' (ex: "Vestiaires femme : [action]").
+4. Déduction : Si "Corner" -> "SHOP". Si "Studio" -> "BIEN ETRE".
+5. Par défaut : "pole_concerne" = "EXPLOITATION".
+6. Auteur : Prénom entendu au début, ou "Camille" par défaut.
+7. Criticité : Choisis strictement parmi "FAIBLE", "MOYENNE", "CRITIQUE".
 
-RÉPONSE ATTENDUE (Tableau JSON strict, AUCUNE virgule dans les valeurs des listes) :
+RÉPONSE ATTENDUE (Tableau JSON strict) :
 [
   {
     "nom_de_la_tache": "Description résumée",
@@ -317,7 +335,7 @@ if final_audio:
                 f_up = client.files.upload(file="temp.m4a")
                 
                 resp = client.models.generate_content(
-                    model='gemini-2.5-flash',
+                    model='gemini-2.0-flash',
                     contents=[f_up, PROMPT_ARKOSE],
                     config=types.GenerateContentConfig(response_mime_type="application/json")
                 )
