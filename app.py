@@ -1,7 +1,5 @@
 import streamlit as st
 from google import genai
-from audiorecorder import audiorecorder
-import io
 from google.genai import types
 import requests
 import json
@@ -216,15 +214,8 @@ else:
     tab_file = onglets[1]
 
 with tab_micro:
-    st.write("Contrôlez l'enregistrement vocal :")
-    audio_record_obj = audiorecorder("🎤 Démarrer", "⏹️ Stopper", "⏸️ Pause")
-    audio_record = None
-    if len(audio_record_obj) > 0:
-        audio_io = io.BytesIO()
-        audio_record_obj.export(audio_io, format="wav")
-        audio_io.name = "Enregistrement_direct.wav"
-        audio_record = audio_io
-        st.audio(audio_record_obj.export().read())
+    st.write("Clique sur le micro pour parler :")
+    audio_record = st.audio_input("Capture vocale en direct")
 
 with tab_file:
     st.write("Sélectionne tes fichiers :")
