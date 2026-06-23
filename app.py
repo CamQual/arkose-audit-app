@@ -129,7 +129,7 @@ SALLES_ARKOSE = {
 # --- GESTION DE L'IMAGE DE FOND ---
 bg_css_rule = ""
 dossier_script = os.path.dirname(os.path.abspath(__file__))
-target_bg = "adobestock_271556185"
+target_bg = "background"
 fond_trouve = None
 
 for fichier in os.listdir('.'):
@@ -142,16 +142,16 @@ if fond_trouve:
         encoded_string = base64.b64encode(image_file.read()).decode()
     bg_css_rule = f"""
     <style>
-    .stApp {{
-        background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.6)), 
-                    url("data:image/jpeg;base64,{encoded_string}") !important;
+    .stApp, [data-testid="stAppViewContainer"] {{
+        background: url("data:image/jpeg;base64,{encoded_string}") !important;
         background-size: cover !important;
         background-attachment: fixed !important;
+        background-position: center !important;
     }}
     </style>
     """
 else:
-    bg_css_rule = "<style>.stApp { background-color: #121212; }</style>"
+    bg_css_rule = "<style>.stApp, [data-testid='stAppViewContainer'] { background-color: #121212; }</style>"
 
 css_base = """
 <style>
@@ -218,10 +218,14 @@ with tab_micro:
     audio_record = st.audio_input("Capture vocale en direct")
 
 with tab_file:
-    st.write("Sélectionne ton fichier :")
-    audio_file = st.file_uploader("Fichier audio (mp3, m4a, wav)", type=['mp3', 'm4a', 'wav'])
+    st.write("Sélectionne tes fichiers :")
+    audio_files = st.file_uploader("Fichiers audio (mp3, m4a, wav)", type=['mp3', 'm4a', 'wav'], accept_multiple_files=True)
 
-final_audio = audio_file if audio_file else audio_record
+fichiers_a_traiter = []
+if audio_files:
+    fichiers_a_traiter.extend(audio_files)
+if audio_record:
+    fichiers_a_traiter.append(audio_record)
 
 if st.session_state['user_role'] == 'admin':
     with tab_admin:
@@ -351,38 +355,52 @@ RÉPONSE ATTENDUE (Tableau JSON strict) :
 ]
 """
 
-if final_audio:
+if fichiers_a_traiter:
     if st.button("Lancer l'analyse vers Notion"):
         with st.spinner("Analyse et envoi vers Notion..."):
-            try:
-                with open("temp.m4a", "wb") as f:
-                    f.write(final_audio.getbuffer())
-                
-                f_up = client.files.upload(file="temp.m4a")
-                
-                resp = client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=[f_up, PROMPT_ARKOSE],
-                    config=types.GenerateContentConfig(response_mime_type="application/json")
-                )
-                
-                items = json.loads(resp.text)
-                
-                if not isinstance(items, list):
-                    items = [items]
-                
-                erreurs = 0
-                for i in items:
-                    try:
-                        push_to_notion(i, db_id, salle_nom)
-                    except Exception as e:
-                        st.error(f"❌ Erreur sur une tâche : {e}")
-                        erreurs += 1
-                
-                if erreurs == 0:
-                    st.success(f"🔥 Audit synchronisé ! {len(items)} tâche(s) ajoutée(s) avec succès.")
-                else:
-                    st.warning(f"⚠️ {len(items) - erreurs} tâches ajoutées, mais {erreurs} ont été refusées par Notion.")
+            erreurs_globales = 0
+            taches_ajoutees_globalement = 0
+            
+            for idx, f_audio in enumerate(fichiers_a_traiter):
+                nom_fichier = getattr(f_audio, 'name', f'Fichier {idx+1}')
+                try:
+                    temp_filename = f"temp_{idx}.m4a"
+                    with open(temp_filename, "wb") as f:
+                        f.write(f_audio.getbuffer())
                     
-            except Exception as e:
-                st.error(f"Erreur technique de l'IA : {e}")
+                    f_up = client.files.upload(file=temp_filename)
+                    
+                    resp = client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=[f_up, PROMPT_ARKOSE],
+                        config=types.GenerateContentConfig(response_mime_type="application/json")
+                    )
+                    
+                    items = json.loads(resp.text)
+                    
+                    if not isinstance(items, list):
+                        items = [items]
+                    
+                    for item in items:
+                        try:
+                            push_to_notion(item, db_id, salle_nom)
+                            taches_ajoutees_globalement += 1
+                        except Exception as e:
+                            st.error(f"❌ Erreur sur une tâche du fichier '{nom_fichier}' : {e}")
+                            erreurs_globales += 1
+                    
+                    try:
+                        os.remove(temp_filename)
+                    except:
+                        pass
+                        
+                except Exception as e:
+                    st.error(f"Erreur technique de l'IA sur le fichier '{nom_fichier}' : {e}")
+                    erreurs_globales += 1
+            
+            if erreurs_globales == 0 and taches_ajoutees_globalement > 0:
+                st.success(f"🔥 Audit synchronisé ! {taches_ajoutees_globalement} tâche(s) ajoutée(s) avec succès depuis {len(fichiers_a_traiter)} fichier(s).")
+            elif taches_ajoutees_globalement > 0:
+                st.warning(f"⚠️ {taches_ajoutees_globalement} tâches ajoutées, mais il y a eu {erreurs_globales} erreurs.")
+            elif erreurs_globales > 0:
+                st.error("❌ Échec de la synchronisation. Aucune tâche n'a pu être ajoutée.")
