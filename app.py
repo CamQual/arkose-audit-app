@@ -155,6 +155,20 @@ if not st.session_state['logged_in']:
                 st.warning("Veuillez entrer un email et un mot de passe.")
     st.stop()
 
+# --- STYLE PAGE PRINCIPALE ---
+st.markdown("""
+<style>
+    .block-container {
+        background-color: rgba(132, 27, 243, 0.75) !important; 
+        padding: 40px !important; 
+        border-radius: 15px !important; 
+        border: 2px solid #841bf3 !important; 
+        margin-top: 20px !important;
+        margin-bottom: 20px !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # --- DÉCONNEXION ---
 col_vide, col_logout = st.columns([4, 1])
 with col_logout:
