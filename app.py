@@ -81,4 +81,55 @@ css_base = """
         background-color: rgba(255,255,255,0.05); border-radius: 8px 8px 0px 0px;
         color: white !important; border: 1px solid rgba(132, 27, 243, 0.2); white-space: nowrap; 
     }
-    .stTabs [aria-selected="true"] { background-color: rgba(132, 27, 24
+    .stTabs [aria-selected="true"] { background-color: rgba(132, 27, 243, 0.3) !important; border-bottom: 3px solid #841bf3 !important; }
+    
+    /* --- CORRECTION STYLE FILE UPLOADER --- */
+    .stSelectbox div[data-baseweb="select"], .stFileUploader section {
+        border: 1px solid #841bf3 !important; background-color: rgba(0,0,0,0.8) !important; border-radius: 12px;
+    }
+    .stFileUploader section { padding: 20px !important; }
+    
+    /* Ciblage precis du bouton pour eviter le doublon de texte */
+    .stFileUploader [data-testid="stBaseButton-secondary"] { 
+        border-radius: 8px !important; 
+        background-color: #841bf3 !important;
+        border: none !important;
+        padding: 8px 16px !important;
+    }
+    .stFileUploader [data-testid="stBaseButton-secondary"] p {
+        color: white !important;
+        font-weight: bold !important;
+    }
+    .stFileUploader [data-testid="stBaseButton-secondary"]:hover { 
+        box-shadow: 0 0 15px rgba(132, 27, 243, 0.5) !important; 
+    }
+    .stFileUploader [data-testid="stBaseButton-secondary"] svg { 
+        display: none !important; 
+    }
+    /* -------------------------------------- */
+
+    .stAudioInput {
+        margin-top: 20px; padding: 15px; border: 1px solid #841bf3 !important;
+        border-radius: 12px; background-color: rgba(0,0,0,0.6);
+    }
+    .stButton>button {
+        border: none !important; background-color: #841bf3 !important; color: white !important;
+        font-weight: 700 !important; border-radius: 12px; padding: 1.2rem; width: 100%; margin-top: 1rem;
+    }
+    .stButton>button:hover { box-shadow: 0 0 30px rgba(132, 27, 243, 0.7); }
+</style>
+"""
+st.markdown(bg_css_rule + css_base, unsafe_allow_html=True)
+
+# --- PAGE DE CONNEXION ---
+if not st.session_state['logged_in']:
+    st.markdown("""
+    <style>
+        [data-testid="stForm"] {
+            background-color: rgba(132, 27, 243, 0.75) !important; 
+            padding: 40px !important; 
+            border-radius: 15px !important; 
+            border: 2px solid #841bf3 !important; 
+            margin-top: 50px;
+        }
+        .stButton
