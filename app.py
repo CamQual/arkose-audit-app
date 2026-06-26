@@ -82,11 +82,23 @@ css_base = """
         color: white !important; border: 1px solid rgba(132, 27, 243, 0.2); white-space: nowrap; 
     }
     .stTabs [aria-selected="true"] { background-color: rgba(132, 27, 243, 0.3) !important; border-bottom: 3px solid #841bf3 !important; }
+    
+    /* --- CORRECTION DU FILE UPLOADER --- */
     .stSelectbox div[data-baseweb="select"], .stFileUploader section {
         border: 1px solid #841bf3 !important; background-color: rgba(0,0,0,0.8) !important; border-radius: 12px;
     }
     .stFileUploader section { padding: 20px !important; }
-    .stFileUploader button { border-radius: 8px !important; }
+    .stFileUploader button { 
+        border-radius: 8px !important; 
+        background-color: #841bf3 !important;
+        color: white !important;
+        font-weight: bold !important;
+        border: none !important;
+        padding: 10px 20px !important;
+    }
+    .stFileUploader button:hover { box-shadow: 0 0 15px rgba(132, 27, 243, 0.5); }
+    /* ---------------------------------- */
+
     .stAudioInput {
         margin-top: 20px; padding: 15px; border: 1px solid #841bf3 !important;
         border-radius: 12px; background-color: rgba(0,0,0,0.6);
@@ -145,7 +157,6 @@ if not st.session_state['logged_in']:
                     st.session_state['user_role'] = result[0]
                     st.rerun()
                 else:
-                    # Vérifions si l'email existe pour donner un message précis
                     c.execute("SELECT role FROM users WHERE email=?", (email_clean,))
                     if c.fetchone():
                         st.error("⛔ Mot de passe incorrect.")
@@ -204,8 +215,6 @@ SALLES_ARKOSE = {
     "Chevaleret": "342457aab01481fe9d70d2cd7ee136c3",
     "Saint Denis - CAO": "342457aab01481dc8ebbf88df7c120a8"
 }
-
-# (Le bloc CSS a été déplacé au début du fichier)
 
 # --- BANNIÈRE ---
 banniere_trouvee = None
@@ -287,13 +296,13 @@ if st.session_state['user_role'] == 'admin':
                     conn.commit()
                     st.rerun()
 
-# --- VIGILE ANTI-INVENTION (BLOQUE L'IA SI ELLE INVENTE DES MOTS) ---
+# --- VIGILE ANTI-INVENTION ---
 def get_valid_option(raw_value, allowed_list, default_value):
     raw_lower = str(raw_value).strip().lower()
     for option in allowed_list:
         if raw_lower == option.lower():
             return option
-    return default_value # Si l'IA a inventé un mot, on force la valeur par défaut !
+    return default_value
 
 LISTE_SOURCE_OBLIGATOIRE = ["EXTERIEUR/TERRASSE", "ACCUEIL", "BAR", "CANTINE", "CUISINE", "TOILETTES SALLE", "VESTIAIRES", "VESTIAIRE SEC", "SAUNA", "FITNESS", "SALLE GLOBALE", "SALLE PRIVATISABLE", "ZONE DE GRIMPE", "SHOP", "BIEN ETRE"]
 ITEM_OBLIGATOIRE = ["ACCUEIL/DISCOURS/EXPE CLIENT", "IMAGE DE MARQUE", "PROPRETE/HYGIENE/ENTRETIEN", "PROCESS", "VALORISATION DE L'OFFRE"]
@@ -307,7 +316,6 @@ def push_to_notion(data, database_id, name):
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Notion-Version": "2022-06-28"}
     date_jour = datetime.now().strftime("%Y-%m-%d")
     
-    # Nettoyage implacable : on passe les réponses de l'IA dans notre vigile
     liste_source_clean = get_valid_option(data.get("liste_source"), LISTE_SOURCE_OBLIGATOIRE, "ACCUEIL")
     item_clean = get_valid_option(data.get("item"), ITEM_OBLIGATOIRE, "PROCESS")
     pole_clean = get_valid_option(data.get("pole_concerne"), POLE_OBLIGATOIRE, "EXPLOITATION")
