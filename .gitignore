@@ -1,0 +1,30 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environnements virtuels
+.venv/
+venv/
+env/
+ENV/
+
+# Streamlit secrets (NE PAS ENVOYER SUR GITHUB)
+.streamlit/secrets.toml
+
+# Variables d'environnement locales
+.env
+.env.local
+
+# Fichiers temporaires et audio lourds
+temp_*
+*.tmp
+*.log
+test_audio.m4a
+
+# Base de données locale SQLite (recréée automatiquement)
+# utilisateurs.db
+
+# Fichiers OS
+.DS_Store
+Thumbs.db
