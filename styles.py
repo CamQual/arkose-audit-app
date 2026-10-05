@@ -38,7 +38,11 @@ def apply_custom_styles():
     css_base = """
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@900&display=swap');
-        p, label, span, div, .stMarkdown { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important; }
+        
+        /* Typographie ciblée pour ne pas casser les polices d'icônes Streamlit */
+        body, p, label, .stMarkdown p, h1, h2, h3, h4, h5, h6 { 
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif !important; 
+        }
         label p { color: white !important; font-weight: 700 !important; font-size: 1.1rem !important; }
         
         /* Onglets */
@@ -76,18 +80,6 @@ def apply_custom_styles():
             font-weight: 700 !important; border-radius: 12px; padding: 1.2rem; width: 100%; margin-top: 1rem;
         }
         .stButton>button:hover { box-shadow: 0 0 30px rgba(132, 27, 243, 0.7); }
-        
-        /* Bouton affichage mot de passe (éviter le texte qui déborde) */
-        div[data-testid="stTextInput"] button {
-            background: transparent !important;
-            border: none !important;
-            color: #ffffff !important;
-            box-shadow: none !important;
-            width: auto !important;
-            padding: 0 8px !important;
-            margin: 0 !important;
-            font-size: 0.8rem !important;
-        }
     </style>
     """
     st.markdown(bg_css + css_base, unsafe_allow_html=True)
@@ -104,15 +96,6 @@ def apply_login_styles():
             margin-top: 50px;
         }
         .stButton>button { width: 100%; background-color: #841bf3 !important; color: white; border-radius: 8px;}
-        div[data-testid="stTextInput"] button {
-            background: transparent !important;
-            border: none !important;
-            color: rgba(255,255,255,0.7) !important;
-            box-shadow: none !important;
-            width: auto !important;
-            margin: 0 !important;
-            padding: 0 8px !important;
-        }
     </style>
     """, unsafe_allow_html=True)
 
