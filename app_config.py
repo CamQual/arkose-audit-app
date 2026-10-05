@@ -21,7 +21,7 @@ SALLES_ARKOSE = {
     "Lille": "342457aab0148143a99dc43e8f4b7d22",
     "Didot": "342457aab01481a19896f3223db047ed",
     "Pont de Sèvres": "342457aab01481079a62d519a238706a",
-    "Canal": "342457aab01480f1bc09d89e923aee6e",
+    "Canal": "342457aab01481d3b6e3d8ad1d1038e3",
     "Strasbourg Saint Denis": "342457aab01481f2aaebd2d9955e73ec",
     "Nanterre": "342457aab01481bd9916f46b3f9ad295",
     "Montmartre": "342457aab01481c2b7e8cdb57558af81",
