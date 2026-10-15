@@ -120,8 +120,17 @@ def render_logo():
     if logo:
         st.image(logo, use_container_width=True)
 
-def render_banner():
-    """Affiche la bannière d'en-tête si elle existe."""
+def render_banner(max_width: int = 280):
+    """Affiche la bannière / logo d'en-tête centré et à taille adaptée."""
     banner = find_asset("arkose_header") or find_asset("banniere")
     if banner:
-        st.image(banner, use_container_width=True)
+        encoded = get_base64_image(banner)
+        ext = "png" if banner.lower().endswith(".png") else "jpeg"
+        st.markdown(
+            f"""
+            <div style="display: flex; justify-content: center; align-items: center; margin: 10px 0 25px 0;">
+                <img src="data:image/{ext};base64,{encoded}" style="max-width: {max_width}px; width: 100%; height: auto;" alt="Logo" />
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
