@@ -21,6 +21,7 @@ temp_*
 *.tmp
 *.log
 test_audio.m4a
+backup_*
 
 # Base de données locale SQLite (recréée automatiquement)
 # utilisateurs.db
