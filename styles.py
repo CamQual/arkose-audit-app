@@ -80,6 +80,19 @@ def apply_custom_styles():
             font-weight: 700 !important; border-radius: 12px; padding: 1.2rem; width: 100%; margin-top: 1rem;
         }
         .stButton>button:hover { box-shadow: 0 0 30px rgba(132, 27, 243, 0.7); }
+
+        /* Centrage et taille maîtrisée des logos */
+        [data-testid="stImage"] {
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+        }
+        [data-testid="stImage"] img {
+            max-width: 240px !important;
+            width: auto !important;
+            height: auto !important;
+            margin: 0 auto !important;
+        }
     </style>
     """
     st.markdown(bg_css + css_base, unsafe_allow_html=True)
@@ -115,22 +128,17 @@ def apply_main_container_styles():
     """, unsafe_allow_html=True)
 
 def render_logo():
-    """Affiche le logo s'il existe."""
+    """Affiche le logo centré s'il existe."""
     logo = find_asset("logo")
     if logo:
-        st.image(logo, use_container_width=True)
+        col1, col2, col3 = st.columns([1, 1.2, 1])
+        with col2:
+            st.image(logo, use_container_width=True)
 
-def render_banner(max_width: int = 280):
-    """Affiche la bannière / logo d'en-tête centré et à taille adaptée."""
+def render_banner():
+    """Affiche la bannière / logo d'en-tête centré et à taille réduite."""
     banner = find_asset("arkose_header") or find_asset("banniere")
     if banner:
-        encoded = get_base64_image(banner)
-        ext = "png" if banner.lower().endswith(".png") else "jpeg"
-        st.markdown(
-            f"""
-            <div style="display: flex; justify-content: center; align-items: center; margin: 10px 0 25px 0;">
-                <img src="data:image/{ext};base64,{encoded}" style="max-width: {max_width}px; width: 100%; height: auto;" alt="Logo" />
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        col1, col2, col3 = st.columns([1, 1.2, 1])
+        with col2:
+            st.image(banner, use_container_width=True)

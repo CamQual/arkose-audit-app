@@ -72,7 +72,7 @@ with col_logout:
         st.session_state['user_role'] = ""
         st.rerun()
 
-# Bannière d'en-tête
+# Bannière d'en-tête (Logo Arkose Qualité centré)
 styles.render_banner()
 
 st.write(f"Connecté en tant que : **{st.session_state['user_email']}** (*{st.session_state['user_role']}*)")
